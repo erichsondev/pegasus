@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pegasus - Configurações</title>
+    <style>
+        :root {
+            --cor-primaria: #007bff;
+            --cor-primaria-hover: #0056b3;
+            --cor-fundo: #f0f8ff;
+            --cor-texto: #333;
+            --cor-branco: #ffffff;
+            --cor-perigo: #dc3545;
+            --cor-perigo-hover: #c82333;
+            --sombra-card: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--cor-fundo); margin: 0; color: var(--cor-texto); }
+        .header {
+            background-color: var(--cor-primaria);
+            color: var(--cor-branco);
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header h1 { margin: 0; font-size: 2em; }
+        main { padding: 40px; }
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 30px;
+            max-width: 900px;
+            margin: auto;
+        }
+        .card {
+            background: var(--cor-branco);
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: var(--sombra-card);
+        }
+        h2 { color: var(--cor-primaria); border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0; }
+        form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 20px; }
+        .form-group { flex: 1 1 150px; }
+        .form-group label { font-size: 0.9em; font-weight: bold; display: block; margin-bottom: 5px;}
+        input, select { width: 100%; padding: 10px; border: 1px solid #dddfe2; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+        button { padding: 10px 15px; border: none; background-color: var(--cor-primaria); color: white; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; height: 42px; }
+        button:hover { background-color: var(--cor-primaria-hover); }
+        ul { list-style-type: none; padding: 0; margin-top: 20px; }
+        li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; font-size: 16px; }
+        li span { flex: 1 1 auto; margin-right: 10px; }
+        .delete-btn { background-color: var(--cor-perigo); flex-shrink: 0; }
+        .btn-voltar { background: #6c757d; color: white; text-decoration: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; transition: background-color 0.2s; }
+        .btn-voltar:hover { background: #5a6268; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>⚙️ Configurações (Matriz)</h1>
+        <a href="./menu.html" class="btn-voltar">❮ Voltar ao Menu</a>
+    </header>
+
+    <main>
+        <div class="grid-container">
+            <div class="card" id="card-lancamentos-fixos">
+                <h2>Lançamentos Fixos e Receitas</h2>
+                <form id="form-lancamento-fixo">
+                    <div class="form-group"><label>Descrição</label><input type="text" id="lf-descricao" required></div>
+                    <div class="form-group"><label>Valor</label><input type="number" step="0.01" id="lf-valor" required></div>
+                    <div class="form-group"><label>Tipo</label><select id="lf-tipo"><option value="receita">Receita</option><option value="despesa">Despesa</option></select></div>
+                    <div class="form-group"><label>Dia do Mês</label><input type="number" id="lf-dia" min="1" max="31" required></div>
+                    <div class="form-group"><label>Categoria</label><select id="lf-categoria"><option value="">Nenhuma</option></select></div>
+                    <button type="submit">Adicionar</button>
+                </form>
+                <ul id="lista-lancamentos-fixos"></ul>
+            </div>
+
+            <div class="card" id="card-categorias-variaveis">
+                <h2>Cadastro de Categorias</h2>
+                <form id="form-categoria">
+                    <div class="form-group" style="flex-grow: 2;"><label>Nome da Categoria</label><input type="text" id="input-nome-categoria" required></div>
+                    <button type="submit">Adicionar</button>
+                </form>
+                <ul id="lista-categorias"></ul>
+            </div>
+
+            <div class="card" id="card-cartoes">
+                <h2>Cartões de Crédito</h2>
+                <form id="form-cartao">
+                    <div class="form-group" style="flex-grow: 2;"><label>Nome do Cartão</label><input type="text" id="input-nome-cartao" required></div>
+                    <button type="submit">Adicionar</button>
+                </form>
+                <ul id="lista-cartoes"></ul>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        
+        // Lógica para Lançamentos Fixos
+        const formLancamentoFixo = document.getElementById('form-lancamento-fixo');
+        const listaLancamentosFixos = document.getElementById('lista-lancamentos-fixos');
+        async function buscarLancamentosFixos() {
+            const lancamentos = await fetch(`${API_URL}/lancamentos-fixos`).then(res => res.json());
+            listaLancamentosFixos.innerHTML = '';
+            lancamentos.forEach(lf => {
+                const item = document.createElement('li');
+                item.innerHTML = `
+                    <span>${lf.descricao} (${lf.tipo})</span>
+                    <span>R$ ${lf.valor.toFixed(2)}</span>
+                    <span>Dia ${lf.dia_do_mes}</span>
+                    <span>Cat: ${lf.nome_categoria || 'N/A'}</span>
+                `;
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'X';
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.onclick = () => deletarLancamentoFixo(lf.id);
+                item.appendChild(deleteBtn);
+                listaLancamentosFixos.appendChild(item);
+            });
+        }
+        async function adicionarLancamentoFixo(e) {
+            e.preventDefault();
+            const lancamento = {
+                descricao: document.getElementById('lf-descricao').value,
+                valor: parseFloat(document.getElementById('lf-valor').value),
+                tipo: document.getElementById('lf-tipo').value,
+                dia_do_mes: parseInt(document.getElementById('lf-dia').value),
+                categoria_id: document.getElementById('lf-categoria').value,
+            };
+            await fetch(`${API_URL}/lancamentos-fixos`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(lancamento)
+            });
+            formLancamentoFixo.reset();
+            buscarLancamentosFixos();
+        }
+        async function deletarLancamentoFixo(id) {
+            await fetch(`${API_URL}/lancamentos-fixos/${id}`, { method: 'DELETE' });
+            buscarLancamentosFixos();
+        }
+        formLancamentoFixo.addEventListener('submit', adicionarLancamentoFixo);
+
+        // Lógica para Categorias
+        const formCategoria = document.getElementById('form-categoria');
+        const inputNomeCategoria = document.getElementById('input-nome-categoria');
+        const listaCategorias = document.getElementById('lista-categorias');
+
+        // ----> A CORREÇÃO ESTÁ AQUI <----
+        async function buscarCategorias() {
+            const response = await fetch(`${API_URL}/categorias`);
+            const categorias = await response.json();
+
+            // 1. Atualiza a lista de exibição de categorias
+            listaCategorias.innerHTML = '';
+            categorias.forEach(categoria => {
+                const item = document.createElement('li');
+                item.innerHTML = `<span>${categoria.nome}</span>`;
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'Deletar';
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.onclick = () => deletarCategoria(categoria.id);
+                item.appendChild(deleteBtn);
+                listaCategorias.appendChild(item);
+            });
+
+            // 2. ATUALIZA TAMBÉM O MENU DE SELEÇÃO NO FORMULÁRIO DE LANÇAMENTOS FIXOS
+            const selectCategoriaLF = document.getElementById('lf-categoria');
+            selectCategoriaLF.innerHTML = '<option value="">Nenhuma</option>'; // Limpa e adiciona a opção padrão
+            categorias.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.id;
+                option.textContent = cat.nome;
+                selectCategoriaLF.appendChild(option);
+            });
+        }
+        async function adicionarCategoria(event) {
+            event.preventDefault();
+            const nome = inputNomeCategoria.value;
+            if (!nome) return;
+            await fetch(`${API_URL}/categorias`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome }) });
+            inputNomeCategoria.value = '';
+            buscarCategorias(); // Esta função agora atualiza tudo que precisa
+        }
+        async function deletarCategoria(id) {
+            await fetch(`${API_URL}/categorias/${id}`, { method: 'DELETE' });
+            buscarCategorias(); // Esta função agora atualiza tudo que precisa
+        }
+        formCategoria.addEventListener('submit', adicionarCategoria);
+
+        // Lógica para Cartões
+        const formCartao = document.getElementById('form-cartao');
+        const inputNomeCartao = document.getElementById('input-nome-cartao');
+        const listaCartoes = document.getElementById('lista-cartoes');
+        async function buscarCartoes() { const response = await fetch(`${API_URL}/cartoes`); const cartoes = await response.json(); listaCartoes.innerHTML = ''; cartoes.forEach(cartao => { const item = document.createElement('li'); item.innerHTML = `<span>${cartao.nome}</span>`; const deleteBtn = document.createElement('button'); deleteBtn.textContent = 'Deletar'; deleteBtn.className = 'delete-btn'; deleteBtn.onclick = () => deletarCartao(cartao.id); item.appendChild(deleteBtn); listaCartoes.appendChild(item); }); }
+        async function adicionarCartao(event) { event.preventDefault(); const nome = inputNomeCartao.value; if (!nome) return; await fetch(`${API_URL}/cartoes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome }) }); inputNomeCartao.value = ''; buscarCartoes(); }
+        async function deletarCartao(id) { await fetch(`${API_URL}/cartoes/${id}`, { method: 'DELETE' }); buscarCartoes(); }
+        formCartao.addEventListener('submit', adicionarCartao);
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', () => {
+            // Simplificado: as funções de busca agora cuidam de popular tudo
+            buscarLancamentosFixos();
+            buscarCategorias();
+            buscarCartoes();
+        });
+    </script>
+</body>
+</html>

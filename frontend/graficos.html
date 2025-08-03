@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pegasus - Análise Gráfica</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --cor-primaria: #007bff;
+            --cor-fundo: #f0f8ff;
+            --cor-branco: #ffffff;
+            --sombra-card: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--cor-fundo); margin: 0; color: #333; }
+        .header { background-color: var(--cor-primaria); color: var(--cor-branco); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header h1 { margin: 0; font-size: 2em; }
+        main { padding: 20px 40px; }
+        .header-content { display: flex; align-items: center; gap: 20px; }
+        .selectors { display: flex; gap: 10px; align-items: center; }
+        .selectors label { font-weight: bold; color: var(--cor-branco); }
+        .selectors select, .selectors input { padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
+        .btn-voltar { background: #6c757d; color: white; text-decoration: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; }
+        .grid-graficos { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; margin-top: 20px; align-items: start; }
+        .grafico-container { background-color: var(--cor-branco); padding: 20px; border-radius: 8px; box-shadow: var(--sombra-card); }
+        .full-width { grid-column: 1 / -1; }
+        h2 { color: var(--cor-primaria); text-align: center; margin-top: 0; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>📈 Análise Geral</h1>
+        <div class="header-content">
+            <div class="selectors">
+                <label for="seletor-ano">Ano:</label>
+                <select id="seletor-ano"></select>
+            </div>
+            <a href="./menu.html" class="btn-voltar">❮ Voltar</a>
+        </div>
+    </header>
+
+    <main>
+        <div class="grid-graficos">
+            <div class="grafico-container full-width">
+                <h2>GPA - Gráfico de Planejamento Anual</h2>
+                <canvas id="graficoPlanejamento"></canvas>
+            </div>
+            <div class="grafico-container">
+                <h2>Análise de Compras Mensais vs. Meta</h2>
+                <div class="selectors" style="justify-content: center; margin-bottom: 15px;">
+                    <label for="input-meta" style="color: #333;">Meta Mensal: R$</label>
+                    <input type="number" id="input-meta" value="1000" style="width: 100px;">
+                </div>
+                <canvas id="graficoCompras"></canvas>
+            </div>
+            <div class="grafico-container">
+                <h2>GCR - Gastos por Cartão de Crédito (Anual)</h2>
+                <canvas id="graficoCartoes"></canvas>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        const seletorAno = document.getElementById('seletor-ano');
+        const inputMeta = document.getElementById('input-meta');
+        
+        let graficoPlanejamento, graficoCompras, graficoCartoes;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            popularSeletorAno();
+            carregarTodosGraficos();
+            seletorAno.addEventListener('change', carregarTodosGraficos);
+            inputMeta.addEventListener('change', carregarTodosGraficos);
+        });
+        
+        function popularSeletorAno() {
+            const anoAtual = new Date().getFullYear();
+            for (let i = anoAtual + 1; i >= anoAtual - 5; i--) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = i;
+                seletorAno.appendChild(option);
+            }
+            seletorAno.value = anoAtual;
+        }
+
+        function carregarTodosGraficos() {
+            const ano = seletorAno.value;
+            const meta = parseFloat(inputMeta.value) || 0;
+            gerarGraficoPlanejamento(ano);
+            gerarGraficoCompras(ano, meta);
+            gerarGraficoCartoes(ano);
+        }
+
+        async function gerarGraficoPlanejamento(ano) {
+            const dados = await fetch(`${API_URL}/grafico/planejamento-anual?ano=${ano}`).then(res => res.json());
+            const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+            
+            if (graficoPlanejamento) graficoPlanejamento.destroy();
+            graficoPlanejamento = new Chart(document.getElementById('graficoPlanejamento'), {
+                type: 'line',
+                data: {
+                    labels: meses,
+                    datasets: [
+                        { label: 'Ganhos', data: dados.map(d => d.ganhos), borderColor: '#28a745', tension: 0.1, borderWidth: 2 },
+                        { label: 'Dívidas', data: dados.map(d => d.dividas), borderColor: '#dc3545', tension: 0.1, borderWidth: 2 },
+                        { label: 'Sobras (Acumulado)', data: dados.map(d => d.sobras), borderColor: '#ffc107', borderWidth: 4, tension: 0.1, backgroundColor: 'rgba(255, 193, 7, 0.1)', fill: true }
+                    ]
+                }
+            });
+        }
+
+        async function gerarGraficoCompras(ano, meta) {
+            const dados = await fetch(`${API_URL}/grafico/compras-mensais?ano=${ano}`).then(res => res.json());
+            const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+            
+            let gastosMensais = Array(12).fill(0);
+            dados.forEach(d => {
+                gastosMensais[parseInt(d.mes) - 1] = d.total;
+            });
+
+            if (graficoCompras) graficoCompras.destroy();
+            graficoCompras = new Chart(document.getElementById('graficoCompras'), {
+                type: 'bar',
+                data: {
+                    labels: meses,
+                    datasets: [
+                        { label: 'Gasto Efetivado', data: gastosMensais, backgroundColor: '#007bff' },
+                        { label: 'Meta', data: Array(12).fill(meta), backgroundColor: 'rgba(255, 193, 7, 0.5)', type: 'line', fill: false, borderColor: '#ffc107', borderWidth: 3, pointRadius: 0 }
+                    ]
+                }
+            });
+        }
+        
+        async function gerarGraficoCartoes(ano) {
+            const dados = await fetch(`${API_URL}/grafico/gastos-por-cartao?ano=${ano}`).then(res => res.json());
+            if (graficoCartoes) graficoCartoes.destroy();
+            graficoCartoes = new Chart(document.getElementById('graficoCartoes'), {
+                type: 'pie',
+                data: {
+                    labels: dados.map(d => d.cartao),
+                    datasets: [{
+                        data: dados.map(d => d.total),
+                        backgroundColor: ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1', '#fd7e14']
+                    }]
+                }
+            });
+        }
+    </script>
+</body>
+</html>

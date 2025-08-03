@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pegasus - Acompanhamento</title>
+    <style>
+        :root {
+            --cor-primaria: #007bff;
+            --cor-primaria-hover: #0056b3;
+            --cor-fundo: #f0f8ff;
+            --cor-texto: #333;
+            --cor-branco: #ffffff;
+            --cor-sucesso: #28a745;
+            --cor-perigo: #dc3545;
+            --cor-perigo-hover: #c82333;
+            --sombra-card: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--cor-fundo); margin: 0; color: var(--cor-texto); }
+        .header { background-color: var(--cor-primaria); color: var(--cor-branco); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header h1 { margin: 0; font-size: 2em; }
+        main { padding: 20px 40px; }
+        .resumo-container { display: flex; flex-direction: column; gap: 15px; margin-bottom: 30px; }
+        .resumo-linha { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .resumo-card { background-color: var(--cor-branco); padding: 15px; border-radius: 8px; box-shadow: var(--sombra-card); text-align: center; border-left: 5px solid #ccc; }
+        .resumo-card p { margin: 0 0 10px 0; font-size: 0.8em; color: #6c757d; font-weight: bold; text-transform: uppercase; }
+        .resumo-card h2 { margin: 0; font-size: 1.7em; border: none; padding: 0; }
+        .linha-efetivado .resumo-card { border-left-color: var(--cor-primaria); }
+        .linha-previsto .resumo-card { border-left-color: #fd7e14; }
+        .linha-saldos .resumo-card { border-left-color: #6f42c1; }
+        #valor-receitas-efetivadas, #valor-receitas-previstas { color: var(--cor-sucesso); }
+        #valor-despesas-efetivadas, #valor-despesas-previstas { color: var(--cor-perigo); }
+        #valor-saldo-atual { font-weight: bold; color: var(--cor-primaria); }
+        #valor-saldo-final { font-weight: bold; color: #17a2b8; }
+        .grid { display: grid; grid-template-columns: 350px 1fr; gap: 30px; align-items: start; max-width: 1400px; margin: auto; }
+        .card { background: var(--cor-branco); padding: 20px 30px; border-radius: 8px; box-shadow: var(--sombra-card); }
+        h2 { color: var(--cor-primaria); border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; }
+        .selectors { display: flex; gap: 10px; }
+        .selectors select { padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
+        form .form-group { margin-bottom: 15px; }
+        form label { display: block; font-weight: bold; margin-bottom: 5px; }
+        form input, form select { width: 100%; padding: 10px; border: 1px solid #dddfe2; border-radius: 6px; font-size: 15px; box-sizing: border-box; }
+        form button { width: 100%; padding: 12px; border: none; background-color: var(--cor-sucesso); color: white; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
+        th { background-color: #f7f7ff; }
+        .valor-receita { font-weight: bold; color: var(--cor-sucesso); }
+        .valor-despesa { font-weight: bold; color: var(--cor-perigo); }
+        .btn-voltar { background: #6c757d; color: white; text-decoration: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; transition: background-color 0.2s; }
+        .btn-voltar:hover { background: #5a6268; }
+        .delete-btn { background-color: var(--cor-perigo); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .delete-btn:hover { background-color: var(--cor-perigo-hover); }
+        .efetivar-btn { background-color: var(--cor-sucesso); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 5px; }
+        .efetivar-btn:hover { background-color: #218838; }
+        .reverter-btn { background-color: #ffc107; color: #212529; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 5px; }
+        .reverter-btn:hover { background-color: #e0a800; }
+        .btn-sincronizar { background-color: #17a2b8; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
+        .btn-sincronizar:hover { background-color: #138496; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1 id="titulo-pagina">📊 Acompanhamento</h1>
+        <div class="selectors">
+            <select id="seletor-mes"></select>
+            <select id="seletor-ano"></select>
+            <a href="./menu.html" class="btn-voltar" style="margin-left: 20px;">❮ Voltar</a>
+        </div>
+    </header>
+
+    <main>
+        <div class="resumo-container">
+            <div class="resumo-linha linha-efetivado">
+                <div class="resumo-card"><p>✅ RECEITAS (EFET.)</p><h2 id="valor-receitas-efetivadas">R$ 0,00</h2></div>
+                <div class="resumo-card"><p>🔻 DESPESAS (EFET.)</p><h2 id="valor-despesas-efetivadas">R$ 0,00</h2></div>
+            </div>
+            <div class="resumo-linha linha-previsto">
+                <div class="resumo-card"><p>✅ RECEITAS (PREV.)</p><h2 id="valor-receitas-previstas">R$ 0,00</h2></div>
+                <div class="resumo-card"><p>🔻 DESPESAS (PREV.)</p><h2 id="valor-despesas-previstas">R$ 0,00</h2></div>
+            </div>
+            <div class="resumo-linha linha-saldos">
+                <div class="resumo-card"><p>SALDO INICIAL</p><h2 id="valor-saldo-inicial">R$ 0,00</h2></div>
+                <div class="resumo-card"><p>💰 SALDO ATUAL</p><h2 id="valor-saldo-atual">R$ 0,00</h2></div>
+                <div class="resumo-card"><p>🎯 SALDO FINAL PROJETADO</p><h2 id="valor-saldo-final">R$ 0,00</h2></div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card" id="form-card">
+                <h2>Nova Transação</h2>
+                <form id="form-transacao">
+                    <div class="form-group"><label for="tipo">Tipo</label><select id="tipo" required><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
+                    <div class="form-group"><label for="descricao">Descrição</label><input type="text" id="descricao" required></div>
+                    <div class="form-group"><label for="valor">Valor (R$)</label><input type="number" step="0.01" id="valor" required></div>
+                    <div class="form-group"><label for="data">Data</label><input type="date" id="data" required></div>
+                    <div class="form-group"><label for="categoria">Categoria</label><select id="categoria"><option value="">Nenhuma</option></select></div>
+                    <div class="form-group" id="cartao-group"><label for="cartao">Cartão de Crédito</label><select id="cartao"><option value="">Nenhum</option></select></div>
+                    <div class="form-group"><label for="status">Status</label><select id="status" required><option value="efetivado">Efetivado</option><option value="previsto">Previsto</option></select></div>
+                    <button type="submit">Adicionar Transação</button>
+                </form>
+            </div>
+            <div class="card" id="list-card">
+                <div class="card-header">
+                    <h2>Lançamentos</h2>
+                    <button id="btn-sincronizar" class="btn-sincronizar">Sincronizar Lançamentos Fixos</button>
+                </div>
+                <table>
+                    <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
+                    <tbody id="tabela-transacoes"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        const seletorMes = document.getElementById('seletor-mes');
+        const seletorAno = document.getElementById('seletor-ano');
+        const tituloPagina = document.getElementById('titulo-pagina');
+        const formTransacao = document.getElementById('form-transacao');
+        const btnSincronizar = document.getElementById('btn-sincronizar');
+
+        document.addEventListener('DOMContentLoaded', () => {
+            popularDropdowns();
+            popularSeletoresDeData();
+            buscarDados();
+            document.getElementById('tipo').addEventListener('change', (e) => {
+                document.getElementById('cartao-group').style.display = e.target.value === 'despesa' ? 'block' : 'none';
+            });
+            seletorMes.addEventListener('change', buscarDados);
+            seletorAno.addEventListener('change', buscarDados);
+            btnSincronizar.addEventListener('click', sincronizarLancamentosFixos);
+        });
+        
+        async function sincronizarLancamentosFixos() {
+            const mes = seletorMes.value;
+            const ano = seletorAno.value;
+            const nomeMes = seletorMes.options[seletorMes.selectedIndex].text;
+
+            if (!confirm(`Isso irá apagar e recriar todos os lançamentos PREVISTOS e automáticos a partir de ${nomeMes}/${ano}.\nO passado não será alterado.\nDeseja continuar?`)) {
+                return;
+            }
+
+            const response = await fetch(`${API_URL}/sincronizar-fixos`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mes, ano })
+            });
+            
+            const result = await response.json();
+            alert(result.message);
+            buscarDados();
+        }
+
+        function buscarDados() {
+            buscarTransacoes();
+            buscarResumo();
+        }
+
+        async function buscarResumo() {
+            const mes = seletorMes.value;
+            const ano = seletorAno.value;
+            const resumo = await fetch(`${API_URL}/resumo?mes=${mes}&ano=${ano}`).then(res => res.json());
+            const formatarMoeda = (valor) => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            
+            document.getElementById('valor-receitas-efetivadas').textContent = formatarMoeda(resumo.totalReceitasEfetivadas);
+            document.getElementById('valor-despesas-efetivadas').textContent = formatarMoeda(resumo.totalDespesasEfetivadas);
+            document.getElementById('valor-receitas-previstas').textContent = formatarMoeda(resumo.totalReceitasPrevistas);
+            document.getElementById('valor-despesas-previstas').textContent = formatarMoeda(resumo.totalDespesasPrevistas);
+            document.getElementById('valor-saldo-inicial').textContent = formatarMoeda(resumo.saldoInicial);
+            document.getElementById('valor-saldo-atual').textContent = formatarMoeda(resumo.saldoAtualAcumulado);
+            document.getElementById('valor-saldo-final').textContent = formatarMoeda(resumo.saldoFinalProjetado);
+        }
+
+        function popularSeletoresDeData() {
+            const hoje = new Date();
+            const mesAtual = hoje.getMonth();
+            const anoAtual = hoje.getFullYear();
+            document.getElementById('data').valueAsDate = hoje;
+            const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+            meses.forEach((mes, index) => {
+                const option = document.createElement('option');
+                option.value = index + 1;
+                option.textContent = mes;
+                seletorMes.appendChild(option);
+            });
+            seletorMes.value = mesAtual + 1;
+            for (let i = anoAtual + 1; i >= anoAtual - 5; i--) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = i;
+                seletorAno.appendChild(option);
+            }
+            seletorAno.value = anoAtual;
+        }
+
+        async function popularDropdowns() {
+            const categorias = await fetch(`${API_URL}/categorias`).then(res => res.json());
+            const selectCategoria = document.getElementById('categoria');
+            selectCategoria.innerHTML = '<option value="">Nenhuma</option>';
+            categorias.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.id;
+                option.textContent = cat.nome;
+                selectCategoria.appendChild(option);
+            });
+            const cartoes = await fetch(`${API_URL}/cartoes`).then(res => res.json());
+            const selectCartao = document.getElementById('cartao');
+            selectCartao.innerHTML = '<option value="">Nenhum</option>';
+            cartoes.forEach(cart => {
+                const option = document.createElement('option');
+                option.value = cart.id;
+                option.textContent = cart.nome;
+                selectCartao.appendChild(option);
+            });
+        }
+
+        async function buscarTransacoes() {
+            const mes = seletorMes.value;
+            const ano = seletorAno.value;
+            const nomeMes = seletorMes.options[seletorMes.selectedIndex].text;
+            tituloPagina.textContent = `📊 Acompanhamento de ${nomeMes}/${ano}`;
+            const transacoes = await fetch(`${API_URL}/transacoes?mes=${mes}&ano=${ano}`).then(res => res.json());
+            const tbody = document.getElementById('tabela-transacoes');
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhuma transação para este período.</td></tr>';
+            if (transacoes.length > 0) {
+                tbody.innerHTML = '';
+                transacoes.forEach(t => {
+                    const tr = document.createElement('tr');
+                    const valorFormatado = t.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                    const dataFormatada = new Date(t.data).toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+                    const descricaoDisplay = t.gerado_automaticamente ? `${t.descricao} (Fixo)` : t.descricao;
+                    tr.innerHTML = `<td>${dataFormatada}</td><td>${descricaoDisplay}</td><td>${t.nome_categoria || 'N/A'}</td><td class="${t.tipo === 'receita' ? 'valor-receita' : 'valor-despesa'}">${valorFormatado}</td><td>${t.status}</td>`;
+                    
+                    const tdAcoes = document.createElement('td');
+                    if (t.status === 'previsto') {
+                        const efetivarBtn = document.createElement('button');
+                        efetivarBtn.textContent = '✅ Efetivar';
+                        efetivarBtn.className = 'efetivar-btn';
+                        efetivarBtn.onclick = () => efetivarTransacao(t.id);
+                        tdAcoes.appendChild(efetivarBtn);
+                    } else {
+                        const reverterBtn = document.createElement('button');
+                        reverterBtn.textContent = '↩️ Reverter';
+                        reverterBtn.className = 'reverter-btn';
+                        reverterBtn.onclick = () => preverTransacao(t.id);
+                        tdAcoes.appendChild(reverterBtn);
+                    }
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.textContent = 'Remover';
+                    deleteBtn.className = 'delete-btn';
+                    deleteBtn.onclick = () => deletarTransacao(t.id);
+                    tdAcoes.appendChild(deleteBtn);
+                    tr.appendChild(tdAcoes);
+                    tbody.appendChild(tr);
+                });
+            }
+        }
+        
+        formTransacao.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const transacao = { tipo: document.getElementById('tipo').value, descricao: document.getElementById('descricao').value, valor: parseFloat(document.getElementById('valor').value), data: document.getElementById('data').value, categoria_id: document.getElementById('categoria').value, cartao_id: document.getElementById('cartao').value, status: document.getElementById('status').value };
+            await fetch(`${API_URL}/transacoes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(transacao) });
+            formTransacao.reset();
+            document.getElementById('data').valueAsDate = new Date();
+            buscarDados();
+        });
+
+        async function deletarTransacao(id) {
+            if (confirm('Tem certeza que deseja remover esta transação? Esta ação não pode ser desfeita.')) {
+                await fetch(`${API_URL}/transacoes/${id}`, { method: 'DELETE' });
+                buscarDados();
+            }
+        }
+
+        async function efetivarTransacao(id) {
+            await fetch(`${API_URL}/transacoes/${id}/efetivar`, { method: 'PUT' });
+            buscarDados();
+        }
+
+        async function preverTransacao(id) {
+            await fetch(`${API_URL}/transacoes/${id}/prever`, { method: 'PUT' });
+            buscarDados();
+        }
+    </script>
+</body>
+</html>

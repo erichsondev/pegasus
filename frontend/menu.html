@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pegasus Financeiro - Menu</title>
+    <style>
+        :root {
+            --cor-primaria: #007bff;
+            --cor-primaria-hover: #0056b3;
+            --cor-fundo: #f0f8ff;
+            --cor-texto: #333;
+            --cor-branco: #ffffff;
+            --sombra-card: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--cor-fundo);
+            color: var(--cor-texto);
+        }
+        .header {
+            background-color: var(--cor-primaria);
+            color: var(--cor-branco);
+            padding: 20px 40px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+        }
+        main {
+            padding: 40px;
+        }
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            max-width: 900px; /* Reduzido para 3 colunas */
+            margin: auto;
+        }
+        .menu-card {
+            background-color: var(--cor-branco);
+            border-radius: 10px;
+            box-shadow: var(--sombra-card);
+            text-decoration: none;
+            color: inherit;
+            padding: 30px;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .menu-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+        }
+        .menu-card .icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+            color: var(--cor-primaria);
+        }
+        .menu-card h2 {
+            margin: 0;
+            font-size: 1.5em;
+        }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <h1>Pegasus Financeiro</h1>
+    </header>
+
+    <main>
+        <div class="menu-grid">
+            <a href="./acompanhamento.html" class="menu-card">
+                <span class="icon">📊</span>
+                <h2>Acompanhamento</h2>
+            </a>
+
+            <a href="./matriz.html" class="menu-card">
+                <span class="icon">⚙️</span>
+                <h2>Configurações</h2>
+            </a>
+
+            <a href="./graficos.html" class="menu-card">
+                <span class="icon">📈</span>
+                <h2>Gráficos</h2>
+            </a>
+        </div>
+    </main>
+
+</body>
+</html>

@@ -63,6 +63,7 @@
         .efetivar-btn:hover { background-color: #218838; }
         .reverter-btn { background-color: #ffc107; color: #212529; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 5px; }
         .reverter-btn:hover { background-color: #e0a800; }
+        /* O botão de sincronizar foi removido, então o estilo dele não é mais necessário, mas pode ser mantido sem problemas. */
         .btn-sincronizar { background-color: #17a2b8; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
         .btn-sincronizar:hover { background-color: #138496; }
     </style>
@@ -75,7 +76,7 @@
                 <select id="seletor-mes"></select>
                 <select id="seletor-ano"></select>
             </div>
-            <div class="header-usuario">
+             <div class="header-usuario">
                 <p id="saudacao-usuario">Olá!</p>
                 <button id="btn-sair">Sair</button>
             </div>
@@ -115,9 +116,8 @@
                 </form>
             </div>
             <div class="card" id="list-card">
-                <div class="card-header">
+                 <div class="card-header">
                     <h2>Lançamentos</h2>
-                    <button id="btn-sincronizar" class="btn-sincronizar">Sincronizar Lançamentos Fixos</button>
                 </div>
                 <table>
                     <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
@@ -136,12 +136,12 @@
         }
 
         // Todo o seu script original vem na sequência
-        const API_URL = 'https://pegasus-backend-57kd.onrender.com/api'; // Certifique-se que esta é sua URL correta
+        const API_URL = 'https://pegasus-backend-57kd.onrender.com/api'; // Sua URL correta
         const seletorMes = document.getElementById('seletor-mes');
         const seletorAno = document.getElementById('seletor-ano');
         const tituloPagina = document.getElementById('titulo-pagina');
         const formTransacao = document.getElementById('form-transacao');
-        const btnSincronizar = document.getElementById('btn-sincronizar');
+        // ALTERAÇÃO: A constante do botão foi removida
         
         // ADIÇÃO: Agora, todas as chamadas para a API precisam enviar o "crachá"
         const headers = {
@@ -170,28 +170,10 @@
             });
             seletorMes.addEventListener('change', buscarDados);
             seletorAno.addEventListener('change', buscarDados);
-            btnSincronizar.addEventListener('click', sincronizarLancamentosFixos);
+            // ALTERAÇÃO: O EventListener do botão foi removido
         });
         
-        async function sincronizarLancamentosFixos() {
-            const mes = seletorMes.value;
-            const ano = seletorAno.value;
-            const nomeMes = seletorMes.options[seletorMes.selectedIndex].text;
-
-            if (!confirm(`Isso irá apagar e recriar todos os lançamentos PREVISTOS e automáticos a partir de ${nomeMes}/${ano}.\nO passado não será alterado.\nDeseja continuar?`)) {
-                return;
-            }
-            // Adicionado 'headers' na chamada
-            const response = await fetch(`${API_URL}/sincronizar-fixos`, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({ mes, ano })
-            });
-            
-            const result = await response.json();
-            alert(result.message);
-            buscarDados();
-        }
+        // ALTERAÇÃO: A função 'sincronizarLancamentosFixos' foi totalmente removida.
 
         function buscarDados() {
             buscarTransacoes();
@@ -201,8 +183,7 @@
         async function buscarResumo() {
             const mes = seletorMes.value;
             const ano = seletorAno.value;
-            // Adicionado 'headers' na chamada
-            const resumo = await fetch(`${API_URL}/resumo?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json());
+            const resumo = await fetch(`${API_URL}/resumo?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json()); // Adicionado aqui
             const formatarMoeda = (valor) => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             
             document.getElementById('valor-receitas-efetivadas').textContent = formatarMoeda(resumo.totalReceitasEfetivadas);
@@ -237,8 +218,7 @@
         }
 
         async function popularDropdowns() {
-            // Adicionado 'headers' na chamada
-            const categorias = await fetch(`${API_URL}/categorias`, { headers }).then(res => res.json());
+            const categorias = await fetch(`${API_URL}/categorias`, { headers }).then(res => res.json()); // Adicionado aqui
             const selectCategoria = document.getElementById('categoria');
             selectCategoria.innerHTML = '<option value="">Nenhuma</option>';
             categorias.forEach(cat => {
@@ -247,8 +227,7 @@
                 option.textContent = cat.nome;
                 selectCategoria.appendChild(option);
             });
-            // Adicionado 'headers' na chamada
-            const cartoes = await fetch(`${API_URL}/cartoes`, { headers }).then(res => res.json());
+            const cartoes = await fetch(`${API_URL}/cartoes`, { headers }).then(res => res.json()); // Adicionado aqui
             const selectCartao = document.getElementById('cartao');
             selectCartao.innerHTML = '<option value="">Nenhum</option>';
             cartoes.forEach(cart => {
@@ -264,8 +243,7 @@
             const ano = seletorAno.value;
             const nomeMes = seletorMes.options[seletorMes.selectedIndex].text;
             tituloPagina.textContent = `📊 Acompanhamento de ${nomeMes}/${ano}`;
-            // Adicionado 'headers' na chamada
-            const transacoes = await fetch(`${API_URL}/transacoes?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json());
+            const transacoes = await fetch(`${API_URL}/transacoes?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json()); // Adicionado aqui
             const tbody = document.getElementById('tabela-transacoes');
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhuma transação para este período.</td></tr>';
             if (transacoes.length > 0) {
@@ -305,8 +283,7 @@
         formTransacao.addEventListener('submit', async (e) => {
             e.preventDefault();
             const transacao = { tipo: document.getElementById('tipo').value, descricao: document.getElementById('descricao').value, valor: parseFloat(document.getElementById('valor').value), data: document.getElementById('data').value, categoria_id: document.getElementById('categoria').value, cartao_id: document.getElementById('cartao').value, status: document.getElementById('status').value };
-            // Adicionado 'headers' na chamada
-            await fetch(`${API_URL}/transacoes`, { method: 'POST', headers: headers, body: JSON.stringify(transacao) });
+            await fetch(`${API_URL}/transacoes`, { method: 'POST', headers: headers, body: JSON.stringify(transacao) }); // Adicionado aqui
             formTransacao.reset();
             document.getElementById('data').valueAsDate = new Date();
             buscarDados();
@@ -314,21 +291,18 @@
 
         async function deletarTransacao(id) {
             if (confirm('Tem certeza que deseja remover esta transação? Esta ação não pode ser desfeita.')) {
-                // Adicionado 'headers' na chamada
-                await fetch(`${API_URL}/transacoes/${id}`, { method: 'DELETE', headers: headers });
+                await fetch(`${API_URL}/transacoes/${id}`, { method: 'DELETE', headers: headers }); // Adicionado aqui
                 buscarDados();
             }
         }
 
         async function efetivarTransacao(id) {
-            // Adicionado 'headers' na chamada
-            await fetch(`${API_URL}/transacoes/${id}/efetivar`, { method: 'PUT', headers: headers });
+            await fetch(`${API_URL}/transacoes/${id}/efetivar`, { method: 'PUT', headers: headers }); // Adicionado aqui
             buscarDados();
         }
 
         async function preverTransacao(id) {
-            // Adicionado 'headers' na chamada
-            await fetch(`${API_URL}/transacoes/${id}/prever`, { method: 'PUT', headers: headers });
+            await fetch(`${API_URL}/transacoes/${id}/prever`, { method: 'PUT', headers: headers }); // Adicionado aqui
             buscarDados();
         }
     </script>

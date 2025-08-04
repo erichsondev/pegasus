@@ -26,6 +26,13 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .header h1 { margin: 0; font-size: 2em; }
+        
+        /* ADIÇÃO: Estilos para a área do usuário */
+        .header-usuario { text-align: right; }
+        .header-usuario p { margin: 0 0 5px 0; font-size: 0.9em;}
+        #btn-sair { background: none; border: 1px solid var(--cor-branco); color: var(--cor-branco); padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        #btn-sair:hover { background-color: var(--cor-branco); color: var(--cor-primaria); }
+
         main { padding: 40px; }
         .grid-container {
             display: grid;
@@ -58,7 +65,11 @@
 <body>
     <header class="header">
         <h1>⚙️ Configurações (Matriz)</h1>
-        <a href="./index.html" class="btn-voltar">❮ Voltar ao Menu</a>
+        <div class="header-usuario">
+            <p id="saudacao-usuario">Olá!</p>
+            <button id="btn-sair">Sair</button>
+        </div>
+        <a href="./index.html" class="btn-voltar">❮ Menu</a>
     </header>
 
     <main>
@@ -97,19 +108,31 @@
     </main>
 
     <script>
-        const API_URL = 'https://pegasus-finance.onrender.com/api';
+        // ADIÇÃO: "Guarita de Segurança"
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = './login.html';
+        }
+
+        // ADIÇÃO: Todas as chamadas para a API agora precisam enviar o "crachá"
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        };
+
+        const API_URL = 'https://pegasus-backend.onrender.com/api'; // Certifique-se que esta é sua URL
         
         // Lógica para Lançamentos Fixos
         const formLancamentoFixo = document.getElementById('form-lancamento-fixo');
         const listaLancamentosFixos = document.getElementById('lista-lancamentos-fixos');
         async function buscarLancamentosFixos() {
-            const lancamentos = await fetch(`${API_URL}/lancamentos-fixos`).then(res => res.json());
+            const lancamentos = await fetch(`${API_URL}/lancamentos-fixos`, { headers }).then(res => res.json());
             listaLancamentosFixos.innerHTML = '';
             lancamentos.forEach(lf => {
                 const item = document.createElement('li');
                 item.innerHTML = `
                     <span>${lf.descricao} (${lf.tipo})</span>
-                    <span>R$ ${lf.valor.toFixed(2)}</span>
+                    <span>R$ ${parseFloat(lf.valor).toFixed(2)}</span>
                     <span>Dia ${lf.dia_do_mes}</span>
                     <span>Cat: ${lf.nome_categoria || 'N/A'}</span>
                 `;
@@ -131,13 +154,13 @@
                 categoria_id: document.getElementById('lf-categoria').value,
             };
             await fetch(`${API_URL}/lancamentos-fixos`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(lancamento)
+                method: 'POST', headers: headers, body: JSON.stringify(lancamento)
             });
             formLancamentoFixo.reset();
             buscarLancamentosFixos();
         }
         async function deletarLancamentoFixo(id) {
-            await fetch(`${API_URL}/lancamentos-fixos/${id}`, { method: 'DELETE' });
+            await fetch(`${API_URL}/lancamentos-fixos/${id}`, { method: 'DELETE', headers: headers });
             buscarLancamentosFixos();
         }
         formLancamentoFixo.addEventListener('submit', adicionarLancamentoFixo);
@@ -147,12 +170,10 @@
         const inputNomeCategoria = document.getElementById('input-nome-categoria');
         const listaCategorias = document.getElementById('lista-categorias');
 
-        // ----> A CORREÇÃO ESTÁ AQUI <----
         async function buscarCategorias() {
-            const response = await fetch(`${API_URL}/categorias`);
+            const response = await fetch(`${API_URL}/categorias`, { headers });
             const categorias = await response.json();
 
-            // 1. Atualiza a lista de exibição de categorias
             listaCategorias.innerHTML = '';
             categorias.forEach(categoria => {
                 const item = document.createElement('li');
@@ -165,9 +186,8 @@
                 listaCategorias.appendChild(item);
             });
 
-            // 2. ATUALIZA TAMBÉM O MENU DE SELEÇÃO NO FORMULÁRIO DE LANÇAMENTOS FIXOS
             const selectCategoriaLF = document.getElementById('lf-categoria');
-            selectCategoriaLF.innerHTML = '<option value="">Nenhuma</option>'; // Limpa e adiciona a opção padrão
+            selectCategoriaLF.innerHTML = '<option value="">Nenhuma</option>';
             categorias.forEach(cat => {
                 const option = document.createElement('option');
                 option.value = cat.id;
@@ -179,13 +199,13 @@
             event.preventDefault();
             const nome = inputNomeCategoria.value;
             if (!nome) return;
-            await fetch(`${API_URL}/categorias`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome }) });
+            await fetch(`${API_URL}/categorias`, { method: 'POST', headers: headers, body: JSON.stringify({ nome }) });
             inputNomeCategoria.value = '';
-            buscarCategorias(); // Esta função agora atualiza tudo que precisa
+            buscarCategorias();
         }
         async function deletarCategoria(id) {
-            await fetch(`${API_URL}/categorias/${id}`, { method: 'DELETE' });
-            buscarCategorias(); // Esta função agora atualiza tudo que precisa
+            await fetch(`${API_URL}/categorias/${id}`, { method: 'DELETE', headers: headers });
+            buscarCategorias();
         }
         formCategoria.addEventListener('submit', adicionarCategoria);
 
@@ -193,14 +213,30 @@
         const formCartao = document.getElementById('form-cartao');
         const inputNomeCartao = document.getElementById('input-nome-cartao');
         const listaCartoes = document.getElementById('lista-cartoes');
-        async function buscarCartoes() { const response = await fetch(`${API_URL}/cartoes`); const cartoes = await response.json(); listaCartoes.innerHTML = ''; cartoes.forEach(cartao => { const item = document.createElement('li'); item.innerHTML = `<span>${cartao.nome}</span>`; const deleteBtn = document.createElement('button'); deleteBtn.textContent = 'Deletar'; deleteBtn.className = 'delete-btn'; deleteBtn.onclick = () => deletarCartao(cartao.id); item.appendChild(deleteBtn); listaCartoes.appendChild(item); }); }
-        async function adicionarCartao(event) { event.preventDefault(); const nome = inputNomeCartao.value; if (!nome) return; await fetch(`${API_URL}/cartoes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome }) }); inputNomeCartao.value = ''; buscarCartoes(); }
-        async function deletarCartao(id) { await fetch(`${API_URL}/cartoes/${id}`, { method: 'DELETE' }); buscarCartoes(); }
+        async function buscarCartoes() { 
+            const response = await fetch(`${API_URL}/cartoes`, { headers });
+            const cartoes = await response.json();
+            listaCartoes.innerHTML = ''; 
+            cartoes.forEach(cartao => { const item = document.createElement('li'); item.innerHTML = `<span>${cartao.nome}</span>`; const deleteBtn = document.createElement('button'); deleteBtn.textContent = 'Deletar'; deleteBtn.className = 'delete-btn'; deleteBtn.onclick = () => deletarCartao(cartao.id); item.appendChild(deleteBtn); listaCartoes.appendChild(item); }); 
+        }
+        async function adicionarCartao(event) { event.preventDefault(); const nome = inputNomeCartao.value; if (!nome) return; await fetch(`${API_URL}/cartoes`, { method: 'POST', headers: headers, body: JSON.stringify({ nome }) }); inputNomeCartao.value = ''; buscarCartoes(); }
+        async function deletarCartao(id) { await fetch(`${API_URL}/cartoes/${id}`, { method: 'DELETE', headers: headers }); buscarCartoes(); }
         formCartao.addEventListener('submit', adicionarCartao);
 
         // Inicialização
         document.addEventListener('DOMContentLoaded', () => {
-            // Simplificado: as funções de busca agora cuidam de popular tudo
+            // ADIÇÃO: Lógica de saudação e botão de sair
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            if (usuario && usuario.nome) {
+                document.getElementById('saudacao-usuario').textContent = `Olá, ${usuario.nome}!`;
+            }
+            document.getElementById('btn-sair').addEventListener('click', () => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('usuario');
+                window.location.href = './login.html';
+            });
+
+            // Código original de inicialização
             buscarLancamentosFixos();
             buscarCategorias();
             buscarCartoes();

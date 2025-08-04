@@ -1,9 +1,15 @@
-// server.js (Sua Versão, com as 3 Novas Rotas de Gráfico)
+// server.js (Sua Versão + Fundação para Contas de Usuário)
 
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
 const cors = require('cors');
+
+// ADIÇÃO 1: Importando as novas ferramentas
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
 
 const app = express();
 const PORT = 3000;
@@ -18,9 +24,28 @@ let db;
     db = await open({ filename: './database.db', driver: sqlite3.Database });
     console.log('Conectado ao banco de dados SQLite.');
 
+    // ADIÇÃO 2: Criando a nova tabela de usuários
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            senha_hash TEXT NOT NULL
+        );
+    `);
+
+    // ADIÇÃO 3: Adicionando a coluna 'usuario_id' em todas as outras tabelas
+    try { await db.exec(`ALTER TABLE lancamentos_fixos ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)`); } catch (e) { /* ignora */ }
+    try { await db.exec(`ALTER TABLE categorias ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)`); } catch (e) { /* ignora */ }
+    try { await db.exec(`ALTER TABLE cartoes_de_credito ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)`); } catch (e) { /* ignora */ }
+    try { await db.exec(`ALTER TABLE transacoes ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)`); } catch (e) { /* ignora */ }
+
+
     await db.exec(`CREATE TABLE IF NOT EXISTS lancamentos_fixos (id INTEGER PRIMARY KEY AUTOINCREMENT, descricao TEXT NOT NULL, valor REAL NOT NULL, tipo TEXT NOT NULL, dia_do_mes INTEGER NOT NULL, categoria_id INTEGER, FOREIGN KEY (categoria_id) REFERENCES categorias (id));`);
-    await db.exec(`CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL UNIQUE);`);
-    await db.exec(`CREATE TABLE IF NOT EXISTS cartoes_de_credito (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL UNIQUE);`);
+    
+    // ADIÇÃO 4: Ajuste nas tabelas para multi-usuário (o comando CREATE original é redundante, mas mantido para integridade)
+    await db.exec(`CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, usuario_id INTEGER, FOREIGN KEY (usuario_id) REFERENCES usuarios(id));`);
+    await db.exec(`CREATE TABLE IF NOT EXISTS cartoes_de_credito (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, usuario_id INTEGER, FOREIGN KEY (usuario_id) REFERENCES usuarios(id));`);
     
     try {
         await db.exec(`ALTER TABLE transacoes ADD COLUMN gerado_automaticamente BOOLEAN DEFAULT 0`);
@@ -31,7 +56,7 @@ let db;
     console.log('Tabelas sincronizadas.');
 })();
 
-// Lógica de Geração de Previsões
+// Lógica de Geração de Previsões (sem alteração)
 async function gerarLancamentosPrevistos(ano, mes) {
     const mesFormatado = String(mes).padStart(2, '0');
     const dataVerificacao = `${ano}-${mesFormatado}`;
@@ -47,9 +72,9 @@ async function gerarLancamentosPrevistos(ano, mes) {
 }
 
 
-// --- FUNÇÃO AUXILIAR RECURSIVA PARA CÁLCULO DE SALDO ---
+// --- FUNÇÃO AUXILIAR RECURSIVA PARA CÁLCULO DE SALDO --- (sem alteração)
 async function calcularResumoParaMes(ano, mes, profundidade = 0) {
-    if (profundidade > 24) return { saldoFinalProjetado: 0 }; // Aumentado para 2 anos de recursão
+    if (profundidade > 24) return { saldoFinalProjetado: 0 };
     const mesFormatado = String(mes).padStart(2, '0');
     const dataFiltro = `${ano}-${mesFormatado}`;
 
@@ -91,7 +116,6 @@ async function calcularResumoParaMes(ano, mes, profundidade = 0) {
         saldoAtualAcumulado,
         saldoPrevistoDoMes,
         saldoFinalProjetado,
-        // Adicionado para o gráfico GPA
         ganhos: totalReceitasEfetivadas + totalReceitasPrevistas,
         dividas: totalDespesasEfetivadas + totalDespesasPrevistas,
         sobras: saldoFinalProjetado
@@ -101,10 +125,52 @@ async function calcularResumoParaMes(ano, mes, profundidade = 0) {
 
 // --- ROTAS DA API ---
 
+// ADIÇÃO 5: Novas rotas de autenticação
+app.post('/api/usuarios/cadastro', async (req, res) => {
+    const { nome, email, senha } = req.body;
+    if (!nome || !email || !senha) {
+        return res.status(400).json({ message: 'Todos os campos são obrigatórios.' });
+    }
+    try {
+        const senha_hash = await bcrypt.hash(senha, 10);
+        const result = await db.run(
+            'INSERT INTO usuarios (nome, email, senha_hash) VALUES (?, ?, ?)',
+            [nome, email, senha_hash]
+        );
+        res.status(201).json({ id: result.lastID, nome, email });
+    } catch (error) {
+        if (error.code === 'SQLITE_CONSTRAINT') {
+            return res.status(409).json({ message: 'Este e-mail já está em uso.' });
+        }
+        res.status(500).json({ message: 'Erro ao cadastrar usuário.', error });
+    }
+});
+
+app.post('/api/usuarios/login', async (req, res) => {
+    const { email, senha } = req.body;
+    if (!email || !senha) {
+        return res.status(400).json({ message: 'Email e senha são obrigatórios.' });
+    }
+    const usuario = await db.get('SELECT * FROM usuarios WHERE email = ?', [email]);
+    if (!usuario) {
+        return res.status(401).json({ message: 'Credenciais inválidas.' });
+    }
+    const senhaCorreta = await bcrypt.compare(senha, usuario.senha_hash);
+    if (!senhaCorreta) {
+        return res.status(401).json({ message: 'Credenciais inválidas.' });
+    }
+    const token = jwt.sign(
+        { id: usuario.id, nome: usuario.nome },
+        process.env.JWT_SECRET,
+        { expiresIn: '8h' }
+    );
+    res.json({ token, usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email } });
+});
+
+
 // API DE RESUMO FINANCEIRO (ATUALIZADA)
 app.get('/api/resumo', async (req, res) => {
     const { mes, ano } = req.query;
-    // Chama a nova função de cálculo recursivo
     const resumoCompleto = await calcularResumoParaMes(parseInt(ano), parseInt(mes));
     res.json(resumoCompleto);
 });
@@ -143,7 +209,7 @@ app.put('/api/transacoes/:id/prever', async (req, res) => {
 });
 
 
-// ***** SEÇÃO DE ROTAS PARA GRÁFICOS (ADICIONADA) *****
+// SEÇÃO DE ROTAS PARA GRÁFICOS (ADICIONADA)
 app.get('/api/grafico/planejamento-anual', async (req, res) => {
     const { ano } = req.query;
     let dadosAnuais = [];
@@ -244,5 +310,5 @@ app.delete('/api/cartoes/:id', async (req, res) => {
 
 // INICIA O SERVIDOR
 app.listen(PORT, () => {
-    console.log(`Servidor rodando em http://localhost:${PORT}`);
+    console.log(`Servidor rodando`);
 });

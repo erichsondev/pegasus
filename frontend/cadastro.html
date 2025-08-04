@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pegasus - Crie sua Conta</title>
+    <style>
+        :root {
+            --cor-primaria: #007bff;
+            --cor-primaria-hover: #0056b3;
+            --cor-fundo: #f0f8ff;
+            --cor-texto: #333;
+            --cor-branco: #ffffff;
+            --sombra-card: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--cor-fundo);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .auth-container {
+            background-color: var(--cor-branco);
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: var(--sombra-card);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        .auth-container h1 {
+            color: var(--cor-primaria);
+            margin-top: 0;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            background-color: var(--cor-primaria);
+            color: white;
+            border-radius: 6px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: var(--cor-primaria-hover);
+        }
+        .link-alternativo {
+            margin-top: 20px;
+        }
+        .link-alternativo a {
+            color: var(--cor-primaria);
+            text-decoration: none;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <h1>Crie sua Conta no Pegasus</h1>
+        <form id="form-cadastro">
+            <div class="form-group">
+                <label for="nome">Nome Completo</label>
+                <input type="text" id="nome" required>
+            </div>
+            <div class="form-group">
+                <label for="email">E-mail</label>
+                <input type="email" id="email" required>
+            </div>
+            <div class="form-group">
+                <label for="senha">Senha</label>
+                <input type="password" id="senha" required>
+            </div>
+            <button type="submit">Cadastrar</button>
+        </form>
+        <div class="link-alternativo">
+            <p>Já tem uma conta? <a href="./login.html">Faça Login</a></p>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://pegasus-backend.onrender.com/api'; // Use a URL do seu backend no Render
+        const formCadastro = document.getElementById('form-cadastro');
+
+        formCadastro.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const nome = document.getElementById('nome').value;
+            const email = document.getElementById('email').value;
+            const senha = document.getElementById('senha').value;
+
+            try {
+                const response = await fetch(`${API_URL}/usuarios/cadastro`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ nome, email, senha }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    // Se o servidor retornar um erro (ex: email já existe), exibe a mensagem
+                    throw new Error(data.message || 'Erro ao cadastrar.');
+                }
+
+                alert('Cadastro realizado com sucesso! Você será redirecionado para a tela de login.');
+                // Redireciona o usuário para a tela de login após o sucesso
+                window.location.href = './login.html';
+
+            } catch (error) {
+                alert(`Erro: ${error.message}`);
+            }
+        });
+    </script>
+</body>
+</html>

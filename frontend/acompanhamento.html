@@ -19,6 +19,14 @@
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--cor-fundo); margin: 0; color: var(--cor-texto); }
         .header { background-color: var(--cor-primaria); color: var(--cor-branco); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .header h1 { margin: 0; font-size: 2em; }
+        
+        /* ADIÇÃO: Estilos para a área do usuário e o novo layout do header */
+        .header-direita { display: flex; align-items: center; gap: 20px; }
+        .header-usuario { text-align: right; }
+        .header-usuario p { margin: 0 0 5px 0; font-size: 0.9em;}
+        #btn-sair { background: none; border: 1px solid var(--cor-branco); color: var(--cor-branco); padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background-color 0.2s, color 0.2s; }
+        #btn-sair:hover { background-color: var(--cor-branco); color: var(--cor-primaria); }
+
         main { padding: 20px 40px; }
         .resumo-container { display: flex; flex-direction: column; gap: 15px; margin-bottom: 30px; }
         .resumo-linha { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
@@ -62,10 +70,16 @@
 <body>
     <header class="header">
         <h1 id="titulo-pagina">📊 Acompanhamento</h1>
-        <div class="selectors">
-            <select id="seletor-mes"></select>
-            <select id="seletor-ano"></select>
-            <a href="./index.html" class="btn-voltar" style="margin-left: 20px;">❮ Voltar</a>
+        <div class="header-direita">
+            <div class="selectors">
+                <select id="seletor-mes"></select>
+                <select id="seletor-ano"></select>
+            </div>
+            <div class="header-usuario">
+                <p id="saudacao-usuario">Olá!</p>
+                <button id="btn-sair">Sair</button>
+            </div>
+            <a href="./index.html" class="btn-voltar">❮ Menu</a>
         </div>
     </header>
 
@@ -114,14 +128,40 @@
     </main>
 
     <script>
-        const API_URL = 'https://pegasus-finance.onrender.com/api';
+        // ADIÇÃO: A lógica de segurança é a primeira coisa que roda
+        const token = localStorage.getItem('token');
+        if (!token) {
+            // Se não tem "crachá", expulsa o usuário para a tela de login
+            window.location.href = './login.html';
+        }
+
+        // Todo o seu script original vem na sequência
+        const API_URL = 'https://pegasus-backend.onrender.com/api'; // Certifique-se que esta é sua URL correta
         const seletorMes = document.getElementById('seletor-mes');
         const seletorAno = document.getElementById('seletor-ano');
         const tituloPagina = document.getElementById('titulo-pagina');
         const formTransacao = document.getElementById('form-transacao');
         const btnSincronizar = document.getElementById('btn-sincronizar');
+        
+        // ADIÇÃO: Agora, todas as chamadas para a API precisam enviar o "crachá"
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        };
 
         document.addEventListener('DOMContentLoaded', () => {
+            // ADIÇÃO: Lógica de saudação e botão de sair
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            if (usuario && usuario.nome) {
+                document.getElementById('saudacao-usuario').textContent = `Olá, ${usuario.nome}!`;
+            }
+            document.getElementById('btn-sair').addEventListener('click', () => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('usuario');
+                window.location.href = './login.html';
+            });
+
+            // O resto do seu código original
             popularDropdowns();
             popularSeletoresDeData();
             buscarDados();
@@ -141,10 +181,10 @@
             if (!confirm(`Isso irá apagar e recriar todos os lançamentos PREVISTOS e automáticos a partir de ${nomeMes}/${ano}.\nO passado não será alterado.\nDeseja continuar?`)) {
                 return;
             }
-
+            // Adicionado 'headers' na chamada
             const response = await fetch(`${API_URL}/sincronizar-fixos`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 body: JSON.stringify({ mes, ano })
             });
             
@@ -161,7 +201,8 @@
         async function buscarResumo() {
             const mes = seletorMes.value;
             const ano = seletorAno.value;
-            const resumo = await fetch(`${API_URL}/resumo?mes=${mes}&ano=${ano}`).then(res => res.json());
+            // Adicionado 'headers' na chamada
+            const resumo = await fetch(`${API_URL}/resumo?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json());
             const formatarMoeda = (valor) => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             
             document.getElementById('valor-receitas-efetivadas').textContent = formatarMoeda(resumo.totalReceitasEfetivadas);
@@ -196,7 +237,8 @@
         }
 
         async function popularDropdowns() {
-            const categorias = await fetch(`${API_URL}/categorias`).then(res => res.json());
+            // Adicionado 'headers' na chamada
+            const categorias = await fetch(`${API_URL}/categorias`, { headers }).then(res => res.json());
             const selectCategoria = document.getElementById('categoria');
             selectCategoria.innerHTML = '<option value="">Nenhuma</option>';
             categorias.forEach(cat => {
@@ -205,7 +247,8 @@
                 option.textContent = cat.nome;
                 selectCategoria.appendChild(option);
             });
-            const cartoes = await fetch(`${API_URL}/cartoes`).then(res => res.json());
+            // Adicionado 'headers' na chamada
+            const cartoes = await fetch(`${API_URL}/cartoes`, { headers }).then(res => res.json());
             const selectCartao = document.getElementById('cartao');
             selectCartao.innerHTML = '<option value="">Nenhum</option>';
             cartoes.forEach(cart => {
@@ -221,7 +264,8 @@
             const ano = seletorAno.value;
             const nomeMes = seletorMes.options[seletorMes.selectedIndex].text;
             tituloPagina.textContent = `📊 Acompanhamento de ${nomeMes}/${ano}`;
-            const transacoes = await fetch(`${API_URL}/transacoes?mes=${mes}&ano=${ano}`).then(res => res.json());
+            // Adicionado 'headers' na chamada
+            const transacoes = await fetch(`${API_URL}/transacoes?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json());
             const tbody = document.getElementById('tabela-transacoes');
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhuma transação para este período.</td></tr>';
             if (transacoes.length > 0) {
@@ -261,7 +305,8 @@
         formTransacao.addEventListener('submit', async (e) => {
             e.preventDefault();
             const transacao = { tipo: document.getElementById('tipo').value, descricao: document.getElementById('descricao').value, valor: parseFloat(document.getElementById('valor').value), data: document.getElementById('data').value, categoria_id: document.getElementById('categoria').value, cartao_id: document.getElementById('cartao').value, status: document.getElementById('status').value };
-            await fetch(`${API_URL}/transacoes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(transacao) });
+            // Adicionado 'headers' na chamada
+            await fetch(`${API_URL}/transacoes`, { method: 'POST', headers: headers, body: JSON.stringify(transacao) });
             formTransacao.reset();
             document.getElementById('data').valueAsDate = new Date();
             buscarDados();
@@ -269,18 +314,21 @@
 
         async function deletarTransacao(id) {
             if (confirm('Tem certeza que deseja remover esta transação? Esta ação não pode ser desfeita.')) {
-                await fetch(`${API_URL}/transacoes/${id}`, { method: 'DELETE' });
+                // Adicionado 'headers' na chamada
+                await fetch(`${API_URL}/transacoes/${id}`, { method: 'DELETE', headers: headers });
                 buscarDados();
             }
         }
 
         async function efetivarTransacao(id) {
-            await fetch(`${API_URL}/transacoes/${id}/efetivar`, { method: 'PUT' });
+            // Adicionado 'headers' na chamada
+            await fetch(`${API_URL}/transacoes/${id}/efetivar`, { method: 'PUT', headers: headers });
             buscarDados();
         }
 
         async function preverTransacao(id) {
-            await fetch(`${API_URL}/transacoes/${id}/prever`, { method: 'PUT' });
+            // Adicionado 'headers' na chamada
+            await fetch(`${API_URL}/transacoes/${id}/prever`, { method: 'PUT', headers: headers });
             buscarDados();
         }
     </script>

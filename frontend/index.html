@@ -23,13 +23,39 @@
             background-color: var(--cor-primaria);
             color: var(--cor-branco);
             padding: 20px 40px;
-            text-align: center;
+            /* ADIÇÃO: Alinha o título e o botão de sair */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .header h1 {
             margin: 0;
             font-size: 2.5em;
         }
+        /* ADIÇÃO: Estilos para a área do usuário no cabeçalho */
+        .header-usuario {
+            text-align: right;
+        }
+        .header-usuario p {
+            margin: 0 0 5px 0;
+            font-size: 0.9em;
+        }
+        #btn-sair {
+            background: none;
+            border: 1px solid var(--cor-branco);
+            color: var(--cor-branco);
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        #btn-sair:hover {
+            background-color: var(--cor-branco);
+            color: var(--cor-primaria);
+        }
+
         main {
             padding: 40px;
         }
@@ -73,6 +99,10 @@
 
     <header class="header">
         <h1>Pegasus Financeiro</h1>
+        <div class="header-usuario">
+            <p id="saudacao-usuario">Olá!</p>
+            <button id="btn-sair">Sair</button>
+        </div>
     </header>
 
     <main>
@@ -93,6 +123,32 @@
             </a>
         </div>
     </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('token');
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+
+            // 1. O "Segurança": Verifica se o usuário está logado
+            if (!token) {
+                // Se não estiver, redireciona para a tela de login
+                window.location.href = './login.html';
+                return;
+            }
+
+            // 2. Personalização: Exibe o nome do usuário
+            if (usuario && usuario.nome) {
+                document.getElementById('saudacao-usuario').textContent = `Olá, ${usuario.nome}!`;
+            }
+
+            // 3. Funcionalidade do botão "Sair"
+            document.getElementById('btn-sair').addEventListener('click', () => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('usuario');
+                window.location.href = './login.html';
+            });
+        });
+    </script>
 
 </body>
 </html>

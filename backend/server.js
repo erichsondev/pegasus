@@ -1,23 +1,20 @@
-// server.js (Versão Definitiva com PostgreSQL)
+// server.js (Versão com data de cadastro do usuário)
 
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { Pool } = require('pg'); // SUBSTITUÍDO: Sai o sqlite, entra o 'pg'
+const { Pool } = require('pg');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000; // Render usa a porta que ele define
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(cors());
 
-// --- NOVA CONEXÃO COM O BANCO DE DADOS POSTGRESQL ---
-// O Pool de conexões vai usar a DATABASE_URL que você configurou no Render
 const db = new Pool({
     connectionString: process.env.DATABASE_URL,
-    // A linha abaixo é importante para conexões em ambientes como o Render
     ssl: {
         rejectUnauthorized: false
     }
@@ -33,15 +30,15 @@ db.connect()
         console.error('Erro de conexão com o banco de dados:', err.stack);
     });
 
-
-// --- NOVA FUNÇÃO DE CRIAÇÃO DE TABELAS PARA POSTGRESQL ---
 const criarTabelasSeNaoExistirem = async () => {
+    // --- ALTERAÇÃO 1: Adicionada a coluna data_cadastro ---
     const criarTabelaUsuarios = `
         CREATE TABLE IF NOT EXISTS usuarios (
             id SERIAL PRIMARY KEY,
             nome TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE,
-            senha_hash TEXT NOT NULL
+            senha_hash TEXT NOT NULL,
+            data_cadastro DATE DEFAULT CURRENT_DATE
         );
     `;
 
@@ -100,19 +97,14 @@ const criarTabelasSeNaoExistirem = async () => {
     }
 };
 
-// Roda a criação das tabelas assim que o servidor iniciar
 criarTabelasSeNaoExistirem();
 
+// --- FUNÇÕES E ROTAS ---
 
-// --- FUNÇÕES E ROTAS ADAPTADAS PARA POSTGRESQL ---
-
-// Lógica de Geração de Previsões
 async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
     const mesFormatado = String(mes).padStart(2, '0');
     const dataVerificacao = `${ano}-${mesFormatado}`;
     
-    // As queries agora usam $1, $2, etc. em vez de '?'
-    // A função strftime do SQLite foi trocada por TO_CHAR do PostgreSQL
     const existentesQuery = "SELECT 1 FROM transacoes WHERE TO_CHAR(data, 'YYYY-MM') = $1 AND gerado_automaticamente = TRUE AND usuario_id = $2";
     const { rows: existentes } = await db.query(existentesQuery, [dataVerificacao, usuarioId]);
     if (existentes.length > 0) { return; }
@@ -128,8 +120,6 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
     }
 }
 
-
-// Função auxiliar para cálculo de saldo
 async function calcularResumoParaMes(ano, mes, usuarioId, profundidade = 0) {
     if (profundidade > 24) return { saldoFinalProjetado: 0 };
     const mesFormatado = String(mes).padStart(2, '0');
@@ -170,21 +160,14 @@ async function calcularResumoParaMes(ano, mes, usuarioId, profundidade = 0) {
     const saldoFinalProjetado = saldoAtualAcumulado + saldoPrevistoDoMes;
 
     return {
-        saldoInicial,
-        totalReceitasEfetivadas,
-        totalDespesasEfetivadas,
-        totalReceitasPrevistas,
-        totalDespesasPrevistas,
-        saldoAtualAcumulado,
-        saldoPrevistoDoMes,
-        saldoFinalProjetado,
+        saldoInicial, totalReceitasEfetivadas, totalDespesasEfetivadas, totalReceitasPrevistas,
+        totalDespesasPrevistas, saldoAtualAcumulado, saldoPrevistoDoMes, saldoFinalProjetado,
         ganhos: totalReceitasEfetivadas + totalReceitasPrevistas,
         dividas: totalDespesasEfetivadas + totalDespesasPrevistas,
         sobras: saldoFinalProjetado
     };
 }
 
-// Middleware de Autenticação (permanece igual)
 const autenticarToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -197,10 +180,6 @@ const autenticarToken = (req, res, next) => {
     });
 };
 
-
-// --- ROTAS DA API ADAPTADAS ---
-
-// ROTAS PÚBLICAS: Cadastro e Login
 app.post('/api/usuarios/cadastro', async (req, res) => {
     const { nome, email, senha } = req.body;
     if (!nome || !email || !senha) {
@@ -212,13 +191,13 @@ app.post('/api/usuarios/cadastro', async (req, res) => {
             return res.status(409).json({ message: 'Este e-mail já está em uso.' });
         }
         const senha_hash = await bcrypt.hash(senha, 10);
-        // Usando RETURNING para pegar o ID do novo usuário
         const result = await db.query('INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3) RETURNING id', [nome, email, senha_hash]);
         res.status(201).json({ id: result.rows[0].id, nome, email });
     } catch (error) {
         res.status(500).json({ message: 'Erro ao cadastrar usuário.', error: error.message });
     }
 });
+
 app.post('/api/usuarios/login', async (req, res) => {
     const { email, senha } = req.body;
     if (!email || !senha) {
@@ -234,10 +213,19 @@ app.post('/api/usuarios/login', async (req, res) => {
         return res.status(401).json({ message: 'Credenciais inválidas.' });
     }
     const token = jwt.sign({ id: usuario.id, nome: usuario.nome }, process.env.JWT_SECRET, { expiresIn: '8h' });
-    res.json({ token, usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email } });
+    
+    // --- ALTERAÇÃO 2: Adicionando a data_cadastro ao objeto de resposta ---
+    res.json({
+        token,
+        usuario: {
+            id: usuario.id,
+            nome: usuario.nome,
+            email: usuario.email,
+            data_cadastro: usuario.data_cadastro
+        }
+    });
 });
 
-// ROTAS PROTEGIDAS
 app.get('/api/resumo', autenticarToken, async (req, res) => {
     const { mes, ano } = req.query;
     const resumoCompleto = await calcularResumoParaMes(parseInt(ano), parseInt(mes), req.usuario.id);
@@ -275,6 +263,8 @@ app.put('/api/transacoes/:id/prever', autenticarToken, async (req, res) => {
     res.status(200).json({ message: 'Transação revertida para previsto!' });
 });
 
+// ... (O restante das rotas de gráficos, lançamentos fixos, etc., continua igual) ...
+
 // ROTAS DE GRÁFICOS
 app.get('/api/grafico/planejamento-anual', autenticarToken, async (req, res) => {
     const { ano } = req.query;
@@ -298,8 +288,7 @@ app.get('/api/grafico/gastos-por-cartao', autenticarToken, async (req, res) => {
     res.json(rows);
 });
 
-
-// ROTAS DE LANÇAMENTOS FIXOS, CATEGORIAS E CARTÕES... (todas adaptadas)
+// ROTAS DE LANÇAMENTOS FIXOS, CATEGORIAS E CARTÕES
 app.get('/api/lancamentos-fixos', autenticarToken, async (req, res) => {
     const sql = 'SELECT lf.*, c.nome as nome_categoria FROM lancamentos_fixos lf LEFT JOIN categorias c ON lf.categoria_id = c.id WHERE lf.usuario_id = $1 ORDER BY lf.tipo, lf.descricao';
     const { rows } = await db.query(sql, [req.usuario.id]);
@@ -336,7 +325,6 @@ app.delete('/api/lancamentos-fixos/:id', autenticarToken, async (req, res) => {
     res.status(204).send();
 });
 
-// CATEGORIAS
 app.get('/api/categorias', autenticarToken, async (req, res) => {
     const { rows } = await db.query('SELECT * FROM categorias WHERE usuario_id = $1 ORDER BY nome', [req.usuario.id]);
     res.json(rows);
@@ -353,7 +341,6 @@ app.delete('/api/categorias/:id', autenticarToken, async (req, res) => {
     res.status(204).send();
 });
 
-// CARTÕES DE CRÉDITO
 app.get('/api/cartoes', autenticarToken, async (req, res) => {
     const { rows } = await db.query('SELECT * FROM cartoes_de_credito WHERE usuario_id = $1 ORDER BY nome', [req.usuario.id]);
     res.json(rows);
@@ -369,7 +356,6 @@ app.delete('/api/cartoes/:id', autenticarToken, async (req, res) => {
     await db.query('DELETE FROM cartoes_de_credito WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
     res.status(204).send();
 });
-
 
 // INICIA O SERVIDOR
 app.listen(PORT, () => {

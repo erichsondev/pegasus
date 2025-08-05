@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pegasus - Acompanhamento</title>
+    <title>Pegasus Finance - Acompanhamento</title>
     <style>
         :root {
             --cor-primaria: #007bff;
@@ -19,14 +19,11 @@
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--cor-fundo); margin: 0; color: var(--cor-texto); }
         .header { background-color: var(--cor-primaria); color: var(--cor-branco); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .header h1 { margin: 0; font-size: 2em; }
-        
-        /* ADIÇÃO: Estilos para a área do usuário e o novo layout do header */
         .header-direita { display: flex; align-items: center; gap: 20px; }
         .header-usuario { text-align: right; }
         .header-usuario p { margin: 0 0 5px 0; font-size: 0.9em;}
         #btn-sair { background: none; border: 1px solid var(--cor-branco); color: var(--cor-branco); padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background-color 0.2s, color 0.2s; }
         #btn-sair:hover { background-color: var(--cor-branco); color: var(--cor-primaria); }
-
         main { padding: 20px 40px; }
         .resumo-container { display: flex; flex-direction: column; gap: 15px; margin-bottom: 30px; }
         .resumo-linha { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
@@ -63,9 +60,6 @@
         .efetivar-btn:hover { background-color: #218838; }
         .reverter-btn { background-color: #ffc107; color: #212529; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 5px; }
         .reverter-btn:hover { background-color: #e0a800; }
-        /* O botão de sincronizar foi removido, então o estilo dele não é mais necessário, mas pode ser mantido sem problemas. */
-        .btn-sincronizar { background-color: #17a2b8; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
-        .btn-sincronizar:hover { background-color: #138496; }
     </style>
 </head>
 <body>
@@ -86,71 +80,38 @@
 
     <main>
         <div class="resumo-container">
-            <div class="resumo-linha linha-efetivado">
-                <div class="resumo-card"><p>✅ RECEITAS (EFET.)</p><h2 id="valor-receitas-efetivadas">R$ 0,00</h2></div>
-                <div class="resumo-card"><p>🔻 DESPESAS (EFET.)</p><h2 id="valor-despesas-efetivadas">R$ 0,00</h2></div>
-            </div>
-            <div class="resumo-linha linha-previsto">
-                <div class="resumo-card"><p>✅ RECEITAS (PREV.)</p><h2 id="valor-receitas-previstas">R$ 0,00</h2></div>
-                <div class="resumo-card"><p>🔻 DESPESAS (PREV.)</p><h2 id="valor-despesas-previstas">R$ 0,00</h2></div>
-            </div>
-            <div class="resumo-linha linha-saldos">
-                <div class="resumo-card"><p>SALDO INICIAL</p><h2 id="valor-saldo-inicial">R$ 0,00</h2></div>
-                <div class="resumo-card"><p>💰 SALDO ATUAL</p><h2 id="valor-saldo-atual">R$ 0,00</h2></div>
-                <div class="resumo-card"><p>🎯 SALDO FINAL PROJETADO</p><h2 id="valor-saldo-final">R$ 0,00</h2></div>
-            </div>
+            <div class="resumo-linha linha-efetivado"><div class="resumo-card"><p>✅ RECEITAS (EFET.)</p><h2 id="valor-receitas-efetivadas">R$ 0,00</h2></div><div class="resumo-card"><p>🔻 DESPESAS (EFET.)</p><h2 id="valor-despesas-efetivadas">R$ 0,00</h2></div></div>
+            <div class="resumo-linha linha-previsto"><div class="resumo-card"><p>✅ RECEITAS (PREV.)</p><h2 id="valor-receitas-previstas">R$ 0,00</h2></div><div class="resumo-card"><p>🔻 DESPESAS (PREV.)</p><h2 id="valor-despesas-previstas">R$ 0,00</h2></div></div>
+            <div class="resumo-linha linha-saldos"><div class="resumo-card"><p>SALDO INICIAL</p><h2 id="valor-saldo-inicial">R$ 0,00</h2></div><div class="resumo-card"><p>💰 SALDO ATUAL</p><h2 id="valor-saldo-atual">R$ 0,00</h2></div><div class="resumo-card"><p>🎯 SALDO FINAL PROJETADO</p><h2 id="valor-saldo-final">R$ 0,00</h2></div></div>
         </div>
-
         <div class="grid">
             <div class="card" id="form-card">
                 <h2>Nova Transação</h2>
-                <form id="form-transacao">
-                    <div class="form-group"><label for="tipo">Tipo</label><select id="tipo" required><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
-                    <div class="form-group"><label for="descricao">Descrição</label><input type="text" id="descricao" required></div>
-                    <div class="form-group"><label for="valor">Valor (R$)</label><input type="number" step="0.01" id="valor" required></div>
-                    <div class="form-group"><label for="data">Data</label><input type="date" id="data" required></div>
-                    <div class="form-group"><label for="categoria">Categoria</label><select id="categoria"><option value="">Nenhuma</option></select></div>
-                    <div class="form-group" id="cartao-group"><label for="cartao">Cartão de Crédito</label><select id="cartao"><option value="">Nenhum</option></select></div>
-                    <div class="form-group"><label for="status">Status</label><select id="status" required><option value="efetivado">Efetivado</option><option value="previsto">Previsto</option></select></div>
-                    <button type="submit">Adicionar Transação</button>
-                </form>
+                <form id="form-transacao"><div class="form-group"><label for="tipo">Tipo</label><select id="tipo" required><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div><div class="form-group"><label for="descricao">Descrição</label><input type="text" id="descricao" required></div><div class="form-group"><label for="valor">Valor (R$)</label><input type="number" step="0.01" id="valor" required></div><div class="form-group"><label for="data">Data</label><input type="date" id="data" required></div><div class="form-group"><label for="categoria">Categoria</label><select id="categoria"><option value="">Nenhuma</option></select></div><div class="form-group" id="cartao-group"><label for="cartao">Cartão de Crédito</label><select id="cartao"><option value="">Nenhum</option></select></div><div class="form-group"><label for="status">Status</label><select id="status" required><option value="efetivado">Efetivado</option><option value="previsto">Previsto</option></select></div><button type="submit">Adicionar Transação</button></form>
             </div>
-            <div class="card" id="list-card">
-                 <div class="card-header">
-                    <h2>Lançamentos</h2>
-                </div>
-                <table>
-                    <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
-                    <tbody id="tabela-transacoes"></tbody>
-                </table>
-            </div>
+            <div class="card" id="list-card"><div class="card-header"><h2>Lançamentos</h2></div><table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead><tbody id="tabela-transacoes"></tbody></table></div>
         </div>
     </main>
 
+    <script src="./config.js"></script>
     <script>
-        // ADIÇÃO: A lógica de segurança é a primeira coisa que roda
         const token = localStorage.getItem('token');
         if (!token) {
-            // Se não tem "crachá", expulsa o usuário para a tela de login
             window.location.href = './login.html';
         }
 
-        // Todo o seu script original vem na sequência
-        const API_URL = 'https://pegasus-backend-57kd.onrender.com/api'; // Sua URL correta
+        // A constante API_URL foi removida daqui, pois agora vem do config.js
         const seletorMes = document.getElementById('seletor-mes');
         const seletorAno = document.getElementById('seletor-ano');
         const tituloPagina = document.getElementById('titulo-pagina');
         const formTransacao = document.getElementById('form-transacao');
-        // ALTERAÇÃO: A constante do botão foi removida
         
-        // ADIÇÃO: Agora, todas as chamadas para a API precisam enviar o "crachá"
         const headers = {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
         };
 
         document.addEventListener('DOMContentLoaded', () => {
-            // ADIÇÃO: Lógica de saudação e botão de sair
             const usuario = JSON.parse(localStorage.getItem('usuario'));
             if (usuario && usuario.nome) {
                 document.getElementById('saudacao-usuario').textContent = `Olá, ${usuario.nome}!`;
@@ -161,19 +122,30 @@
                 window.location.href = './login.html';
             });
 
-            // O resto do seu código original
             popularDropdowns();
             popularSeletoresDeData();
             buscarDados();
+
             document.getElementById('tipo').addEventListener('change', (e) => {
                 document.getElementById('cartao-group').style.display = e.target.value === 'despesa' ? 'block' : 'none';
             });
-            seletorMes.addEventListener('change', buscarDados);
-            seletorAno.addEventListener('change', buscarDados);
-            // ALTERAÇÃO: O EventListener do botão foi removido
+
+            seletorMes.addEventListener('change', () => {
+                buscarDados();
+                atualizarDataFormulario();
+            });
+            seletorAno.addEventListener('change', () => {
+                buscarDados();
+                atualizarDataFormulario();
+            });
         });
         
-        // ALTERAÇÃO: A função 'sincronizarLancamentosFixos' foi totalmente removida.
+        function atualizarDataFormulario() {
+            const ano = seletorAno.value;
+            const mes = seletorMes.value;
+            const primeiroDiaDoMes = new Date(ano, mes - 1, 1);
+            document.getElementById('data').valueAsDate = primeiroDiaDoMes;
+        }
 
         function buscarDados() {
             buscarTransacoes();
@@ -183,7 +155,7 @@
         async function buscarResumo() {
             const mes = seletorMes.value;
             const ano = seletorAno.value;
-            const resumo = await fetch(`${API_URL}/resumo?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json()); // Adicionado aqui
+            const resumo = await fetch(`${API_URL}/resumo?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json());
             const formatarMoeda = (valor) => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             
             document.getElementById('valor-receitas-efetivadas').textContent = formatarMoeda(resumo.totalReceitasEfetivadas);
@@ -195,30 +167,54 @@
             document.getElementById('valor-saldo-final').textContent = formatarMoeda(resumo.saldoFinalProjetado);
         }
 
+        // --- ALTERAÇÃO: Função inteira substituída pela versão inteligente ---
         function popularSeletoresDeData() {
             const hoje = new Date();
-            const mesAtual = hoje.getMonth();
             const anoAtual = hoje.getFullYear();
-            document.getElementById('data').valueAsDate = hoje;
+            const mesAtual = hoje.getMonth();
+            
+            // Pega os dados do usuário guardados no login
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            
+            // Define o ano de início: ou o ano de cadastro do usuário, ou o ano atual como padrão
+            const anoInicio = usuario && usuario.data_cadastro 
+                ? new Date(usuario.data_cadastro).getFullYear() 
+                : anoAtual;
+
+            // Popula o seletor de Mês
             const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+            seletorMes.innerHTML = '';
             meses.forEach((mes, index) => {
                 const option = document.createElement('option');
                 option.value = index + 1;
                 option.textContent = mes;
                 seletorMes.appendChild(option);
             });
-            seletorMes.value = mesAtual + 1;
-            for (let i = anoAtual + 1; i >= anoAtual - 5; i--) {
+            // Define o mês atual como padrão
+            // Para você, como pediu, será Agosto. Para novos usuários, o mês atual.
+            const dataImplantacao = new Date('2025-08-01');
+            if (anoAtual === dataImplantacao.getFullYear() && mesAtual < dataImplantacao.getMonth()) {
+                 seletorMes.value = dataImplantacao.getMonth() + 1; // Agosto
+            } else {
+                 seletorMes.value = mesAtual + 1;
+            }
+
+            // Popula o seletor de Ano com a nova lógica
+            seletorAno.innerHTML = '';
+            for (let i = anoAtual + 5; i >= anoInicio; i--) {
                 const option = document.createElement('option');
                 option.value = i;
                 option.textContent = i;
                 seletorAno.appendChild(option);
             }
             seletorAno.value = anoAtual;
+
+            // Atualiza a data do formulário para o mês/ano selecionado
+            atualizarDataFormulario();
         }
 
         async function popularDropdowns() {
-            const categorias = await fetch(`${API_URL}/categorias`, { headers }).then(res => res.json()); // Adicionado aqui
+            const categorias = await fetch(`${API_URL}/categorias`, { headers }).then(res => res.json());
             const selectCategoria = document.getElementById('categoria');
             selectCategoria.innerHTML = '<option value="">Nenhuma</option>';
             categorias.forEach(cat => {
@@ -227,7 +223,7 @@
                 option.textContent = cat.nome;
                 selectCategoria.appendChild(option);
             });
-            const cartoes = await fetch(`${API_URL}/cartoes`, { headers }).then(res => res.json()); // Adicionado aqui
+            const cartoes = await fetch(`${API_URL}/cartoes`, { headers }).then(res => res.json());
             const selectCartao = document.getElementById('cartao');
             selectCartao.innerHTML = '<option value="">Nenhum</option>';
             cartoes.forEach(cart => {
@@ -243,7 +239,7 @@
             const ano = seletorAno.value;
             const nomeMes = seletorMes.options[seletorMes.selectedIndex].text;
             tituloPagina.textContent = `📊 Acompanhamento de ${nomeMes}/${ano}`;
-            const transacoes = await fetch(`${API_URL}/transacoes?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json()); // Adicionado aqui
+            const transacoes = await fetch(`${API_URL}/transacoes?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json());
             const tbody = document.getElementById('tabela-transacoes');
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhuma transação para este período.</td></tr>';
             if (transacoes.length > 0) {
@@ -283,26 +279,26 @@
         formTransacao.addEventListener('submit', async (e) => {
             e.preventDefault();
             const transacao = { tipo: document.getElementById('tipo').value, descricao: document.getElementById('descricao').value, valor: parseFloat(document.getElementById('valor').value), data: document.getElementById('data').value, categoria_id: document.getElementById('categoria').value, cartao_id: document.getElementById('cartao').value, status: document.getElementById('status').value };
-            await fetch(`${API_URL}/transacoes`, { method: 'POST', headers: headers, body: JSON.stringify(transacao) }); // Adicionado aqui
+            await fetch(`${API_URL}/transacoes`, { method: 'POST', headers: headers, body: JSON.stringify(transacao) });
             formTransacao.reset();
-            document.getElementById('data').valueAsDate = new Date();
+            atualizarDataFormulario();
             buscarDados();
         });
 
         async function deletarTransacao(id) {
             if (confirm('Tem certeza que deseja remover esta transação? Esta ação não pode ser desfeita.')) {
-                await fetch(`${API_URL}/transacoes/${id}`, { method: 'DELETE', headers: headers }); // Adicionado aqui
+                await fetch(`${API_URL}/transacoes/${id}`, { method: 'DELETE', headers: headers });
                 buscarDados();
             }
         }
 
         async function efetivarTransacao(id) {
-            await fetch(`${API_URL}/transacoes/${id}/efetivar`, { method: 'PUT', headers: headers }); // Adicionado aqui
+            await fetch(`${API_URL}/transacoes/${id}/efetivar`, { method: 'PUT', headers: headers });
             buscarDados();
         }
 
         async function preverTransacao(id) {
-            await fetch(`${API_URL}/transacoes/${id}/prever`, { method: 'PUT', headers: headers }); // Adicionado aqui
+            await fetch(`${API_URL}/transacoes/${id}/prever`, { method: 'PUT', headers: headers });
             buscarDados();
         }
     </script>

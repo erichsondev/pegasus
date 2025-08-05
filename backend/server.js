@@ -1,94 +1,157 @@
-// server.js (Versão Corrigida e Automatizada)
+// server.js (Versão Definitiva com PostgreSQL)
 
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
-const { open } = require('sqlite');
 const cors = require('cors');
-
-// ADIÇÃO: Importando as novas ferramentas
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { Pool } = require('pg'); // SUBSTITUÍDO: Sai o sqlite, entra o 'pg'
 require('dotenv').config();
 
-
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000; // Render usa a porta que ele define
 
 app.use(express.json());
 app.use(cors());
 
-let db;
+// --- NOVA CONEXÃO COM O BANCO DE DADOS POSTGRESQL ---
+// O Pool de conexões vai usar a DATABASE_URL que você configurou no Render
+const db = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    // A linha abaixo é importante para conexões em ambientes como o Render
+    ssl: {
+        rejectUnauthorized: false
+    }
+});
 
-// Conexão com o banco e criação/sincronização de tabelas
-(async () => {
-    db = await open({ filename: './database.db', driver: sqlite3.Database });
-    console.log('Conectado ao banco de dados SQLite.');
+console.log('Tentando conectar ao banco de dados PostgreSQL...');
+db.connect()
+    .then(client => {
+        console.log('Conectado com sucesso ao banco de dados PostgreSQL!');
+        client.release();
+    })
+    .catch(err => {
+        console.error('Erro de conexão com o banco de dados:', err.stack);
+    });
 
-    // ADIÇÃO: Tabela de usuários
-    await db.exec(`
+
+// --- NOVA FUNÇÃO DE CRIAÇÃO DE TABELAS PARA POSTGRESQL ---
+const criarTabelasSeNaoExistirem = async () => {
+    const criarTabelaUsuarios = `
         CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             nome TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE,
             senha_hash TEXT NOT NULL
         );
-    `);
-    
-    // ADIÇÃO: Colunas 'usuario_id' para criar o "condomínio"
-    try { await db.exec(`ALTER TABLE lancamentos_fixos ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)`); } catch (e) { /* ignora se já existe */ }
-    try { await db.exec(`ALTER TABLE categorias ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)`); } catch (e) { /* ignora se já existe */ }
-    try { await db.exec(`ALTER TABLE cartoes_de_credito ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)`); } catch (e) { /* ignora se já existe */ }
-    try { await db.exec(`ALTER TABLE transacoes ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)`); } catch (e) { /* ignora se já existe */ }
+    `;
 
-    await db.exec(`CREATE TABLE IF NOT EXISTS lancamentos_fixos (id INTEGER PRIMARY KEY AUTOINCREMENT, descricao TEXT NOT NULL, valor REAL NOT NULL, tipo TEXT NOT NULL, dia_do_mes INTEGER NOT NULL, categoria_id INTEGER, usuario_id INTEGER, FOREIGN KEY (categoria_id) REFERENCES categorias (id), FOREIGN KEY (usuario_id) REFERENCES usuarios(id));`);
-    
-    // AJUSTE ESSENCIAL: Removido 'UNIQUE' do nome para permitir que usuários diferentes tenham categorias/cartões com mesmo nome
-    await db.exec(`CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, usuario_id INTEGER, FOREIGN KEY (usuario_id) REFERENCES usuarios(id));`);
-    await db.exec(`CREATE TABLE IF NOT EXISTS cartoes_de_credito (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, usuario_id INTEGER, FOREIGN KEY (usuario_id) REFERENCES usuarios(id));`);
+    const criarTabelaCategorias = `
+        CREATE TABLE IF NOT EXISTS categorias (
+            id SERIAL PRIMARY KEY,
+            nome TEXT NOT NULL,
+            usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE
+        );
+    `;
+
+    const criarTabelaCartoes = `
+        CREATE TABLE IF NOT EXISTS cartoes_de_credito (
+            id SERIAL PRIMARY KEY,
+            nome TEXT NOT NULL,
+            usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE
+        );
+    `;
+
+    const criarTabelaLancamentosFixos = `
+        CREATE TABLE IF NOT EXISTS lancamentos_fixos (
+            id SERIAL PRIMARY KEY,
+            descricao TEXT NOT NULL,
+            valor REAL NOT NULL,
+            tipo TEXT NOT NULL,
+            dia_do_mes INTEGER NOT NULL,
+            categoria_id INTEGER REFERENCES categorias(id) ON DELETE SET NULL,
+            usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE
+        );
+    `;
+
+    const criarTabelaTransacoes = `
+        CREATE TABLE IF NOT EXISTS transacoes (
+            id SERIAL PRIMARY KEY,
+            descricao TEXT NOT NULL,
+            valor REAL NOT NULL,
+            data DATE NOT NULL,
+            status TEXT NOT NULL,
+            tipo TEXT NOT NULL,
+            categoria_id INTEGER REFERENCES categorias(id) ON DELETE SET NULL,
+            cartao_id INTEGER REFERENCES cartoes_de_credito(id) ON DELETE SET NULL,
+            gerado_automaticamente BOOLEAN DEFAULT FALSE,
+            usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE
+        );
+    `;
     
     try {
-        await db.exec(`ALTER TABLE transacoes ADD COLUMN gerado_automaticamente BOOLEAN DEFAULT 0`);
-    } catch (e) { /* ignora erro se coluna já existe */ }
+        await db.query(criarTabelaUsuarios);
+        await db.query(criarTabelaCategorias);
+        await db.query(criarTabelaCartoes);
+        await db.query(criarTabelaLancamentosFixos);
+        await db.query(criarTabelaTransacoes);
+        console.log('Tabelas sincronizadas com o PostgreSQL.');
+    } catch (err) {
+        console.error('Erro ao criar tabelas:', err);
+    }
+};
 
-    await db.exec(`CREATE TABLE IF NOT EXISTS transacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, descricao TEXT NOT NULL, valor REAL NOT NULL, data DATE NOT NULL, status TEXT NOT NULL, tipo TEXT NOT NULL, categoria_id INTEGER, cartao_id INTEGER, gerado_automaticamente BOOLEAN DEFAULT 0, usuario_id INTEGER, FOREIGN KEY (categoria_id) REFERENCES categorias (id), FOREIGN KEY (cartao_id) REFERENCES cartoes_de_credito (id), FOREIGN KEY (usuario_id) REFERENCES usuarios(id));`);
-    
-    console.log('Tabelas sincronizadas.');
-})();
+// Roda a criação das tabelas assim que o servidor iniciar
+criarTabelasSeNaoExistirem();
 
-// Lógica de Geração de Previsões (AGORA FILTRADA POR USUÁRIO)
+
+// --- FUNÇÕES E ROTAS ADAPTADAS PARA POSTGRESQL ---
+
+// Lógica de Geração de Previsões
 async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
     const mesFormatado = String(mes).padStart(2, '0');
     const dataVerificacao = `${ano}-${mesFormatado}`;
-    const existentes = await db.get("SELECT 1 FROM transacoes WHERE strftime('%Y-%m', data) = ? AND gerado_automaticamente = 1 AND usuario_id = ?", [dataVerificacao, usuarioId]);
-    if (existentes) { return; }
-    const lancamentosFixos = await db.all('SELECT * FROM lancamentos_fixos WHERE usuario_id = ?', [usuarioId]);
+    
+    // As queries agora usam $1, $2, etc. em vez de '?'
+    // A função strftime do SQLite foi trocada por TO_CHAR do PostgreSQL
+    const existentesQuery = "SELECT 1 FROM transacoes WHERE TO_CHAR(data, 'YYYY-MM') = $1 AND gerado_automaticamente = TRUE AND usuario_id = $2";
+    const { rows: existentes } = await db.query(existentesQuery, [dataVerificacao, usuarioId]);
+    if (existentes.length > 0) { return; }
+
+    const lancamentosFixosQuery = 'SELECT * FROM lancamentos_fixos WHERE usuario_id = $1';
+    const { rows: lancamentosFixos } = await db.query(lancamentosFixosQuery, [usuarioId]);
     if (lancamentosFixos.length === 0) return;
 
     for (const fixo of lancamentosFixos) {
         const dataLancamento = `${ano}-${mesFormatado}-${String(fixo.dia_do_mes).padStart(2, '0')}`;
-        await db.run('INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id) VALUES (?, ?, ?, "previsto", ?, ?, 1, ?)', [fixo.descricao, fixo.valor, dataLancamento, fixo.tipo, fixo.categoria_id, usuarioId]);
+        const insertQuery = 'INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id) VALUES ($1, $2, $3, \'previsto\', $4, $5, TRUE, $6)';
+        await db.query(insertQuery, [fixo.descricao, fixo.valor, dataLancamento, fixo.tipo, fixo.categoria_id, usuarioId]);
     }
 }
 
 
-// --- FUNÇÃO AUXILIAR RECURSIVA PARA CÁLCULO DE SALDO --- (AGORA FILTRADA POR USUÁRIO)
+// Função auxiliar para cálculo de saldo
 async function calcularResumoParaMes(ano, mes, usuarioId, profundidade = 0) {
     if (profundidade > 24) return { saldoFinalProjetado: 0 };
     const mesFormatado = String(mes).padStart(2, '0');
     const dataFiltro = `${ano}-${mesFormatado}`;
 
     const sqls = {
-        receitasEfetivadas: `SELECT SUM(valor) as total FROM transacoes WHERE tipo = 'receita' AND status = 'efetivado' AND strftime('%Y-%m', data) = ? AND usuario_id = ?`,
-        despesasEfetivadas: `SELECT SUM(valor) as total FROM transacoes WHERE tipo = 'despesa' AND status = 'efetivado' AND strftime('%Y-%m', data) = ? AND usuario_id = ?`,
-        receitasPrevistas: `SELECT SUM(valor) as total FROM transacoes WHERE tipo = 'receita' AND status = 'previsto' AND strftime('%Y-%m', data) = ? AND usuario_id = ?`,
-        despesasPrevistas: `SELECT SUM(valor) as total FROM transacoes WHERE tipo = 'despesa' AND status = 'previsto' AND strftime('%Y-%m', data) = ? AND usuario_id = ?`
+        receitasEfetivadas: `SELECT SUM(valor) as total FROM transacoes WHERE tipo = 'receita' AND status = 'efetivado' AND TO_CHAR(data, 'YYYY-MM') = $1 AND usuario_id = $2`,
+        despesasEfetivadas: `SELECT SUM(valor) as total FROM transacoes WHERE tipo = 'despesa' AND status = 'efetivado' AND TO_CHAR(data, 'YYYY-MM') = $1 AND usuario_id = $2`,
+        receitasPrevistas: `SELECT SUM(valor) as total FROM transacoes WHERE tipo = 'receita' AND status = 'previsto' AND TO_CHAR(data, 'YYYY-MM') = $1 AND usuario_id = $2`,
+        despesasPrevistas: `SELECT SUM(valor) as total FROM transacoes WHERE tipo = 'despesa' AND status = 'previsto' AND TO_CHAR(data, 'YYYY-MM') = $1 AND usuario_id = $2`
+    };
+
+    const runQuery = async (sql) => {
+        const { rows } = await db.query(sql, [dataFiltro, usuarioId]);
+        return rows[0]?.total || 0;
     };
 
     const [totalReceitasEfetivadas, totalDespesasEfetivadas, totalReceitasPrevistas, totalDespesasPrevistas] = await Promise.all([
-        db.get(sqls.receitasEfetivadas, [dataFiltro, usuarioId]).then(r => r?.total || 0),
-        db.get(sqls.despesasEfetivadas, [dataFiltro, usuarioId]).then(r => r?.total || 0),
-        db.get(sqls.receitasPrevistas, [dataFiltro, usuarioId]).then(r => r?.total || 0),
-        db.get(sqls.despesasPrevistas, [dataFiltro, usuarioId]).then(r => r?.total || 0),
+        runQuery(sqls.receitasEfetivadas),
+        runQuery(sqls.despesasEfetivadas),
+        runQuery(sqls.receitasPrevistas),
+        runQuery(sqls.despesasPrevistas),
     ]);
     
     let mesAnterior = mes - 1;
@@ -121,8 +184,7 @@ async function calcularResumoParaMes(ano, mes, usuarioId, profundidade = 0) {
     };
 }
 
-
-// ADIÇÃO: O "Segurança" da API (Middleware de Autenticação)
+// Middleware de Autenticação (permanece igual)
 const autenticarToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -136,7 +198,7 @@ const autenticarToken = (req, res, next) => {
 };
 
 
-// --- ROTAS DA API ---
+// --- ROTAS DA API ADAPTADAS ---
 
 // ROTAS PÚBLICAS: Cadastro e Login
 app.post('/api/usuarios/cadastro', async (req, res) => {
@@ -145,13 +207,14 @@ app.post('/api/usuarios/cadastro', async (req, res) => {
         return res.status(400).json({ message: 'Todos os campos são obrigatórios.' });
     }
     try {
-        const emailExistente = await db.get('SELECT id FROM usuarios WHERE email = ?', [email]);
-        if (emailExistente) {
+        const { rows } = await db.query('SELECT id FROM usuarios WHERE email = $1', [email]);
+        if (rows.length > 0) {
             return res.status(409).json({ message: 'Este e-mail já está em uso.' });
         }
         const senha_hash = await bcrypt.hash(senha, 10);
-        const result = await db.run('INSERT INTO usuarios (nome, email, senha_hash) VALUES (?, ?, ?)', [nome, email, senha_hash]);
-        res.status(201).json({ id: result.lastID, nome, email });
+        // Usando RETURNING para pegar o ID do novo usuário
+        const result = await db.query('INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3) RETURNING id', [nome, email, senha_hash]);
+        res.status(201).json({ id: result.rows[0].id, nome, email });
     } catch (error) {
         res.status(500).json({ message: 'Erro ao cadastrar usuário.', error: error.message });
     }
@@ -161,7 +224,8 @@ app.post('/api/usuarios/login', async (req, res) => {
     if (!email || !senha) {
         return res.status(400).json({ message: 'Email e senha são obrigatórios.' });
     }
-    const usuario = await db.get('SELECT * FROM usuarios WHERE email = ?', [email]);
+    const { rows } = await db.query('SELECT * FROM usuarios WHERE email = $1', [email]);
+    const usuario = rows[0];
     if (!usuario) {
         return res.status(401).json({ message: 'Credenciais inválidas.' });
     }
@@ -173,191 +237,141 @@ app.post('/api/usuarios/login', async (req, res) => {
     res.json({ token, usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email } });
 });
 
-
-// --- ROTAS PROTEGIDAS (A PARTIR DAQUI, TUDO EXIGE LOGIN) ---
-
-// API DE RESUMO FINANCEIRO (BLINDADA)
+// ROTAS PROTEGIDAS
 app.get('/api/resumo', autenticarToken, async (req, res) => {
     const { mes, ano } = req.query;
     const resumoCompleto = await calcularResumoParaMes(parseInt(ano), parseInt(mes), req.usuario.id);
     res.json(resumoCompleto);
 });
 
-// API DE TRANSAÇÕES (BLINDADA)
 app.get('/api/transacoes', autenticarToken, async (req, res) => {
     const { mes, ano } = req.query;
     await gerarLancamentosPrevistos(parseInt(ano), parseInt(mes), req.usuario.id);
     const mesFormatado = String(mes).padStart(2, '0');
-    const transacoes = await db.all(`SELECT t.*, c.nome as nome_categoria, cc.nome as nome_cartao FROM transacoes t LEFT JOIN categorias c ON t.categoria_id = c.id LEFT JOIN cartoes_de_credito cc ON t.cartao_id = cc.id WHERE strftime('%Y-%m', t.data) = ? AND t.usuario_id = ? ORDER BY t.data DESC`, [`${ano}-${mesFormatado}`, req.usuario.id]);
-    res.json(transacoes);
+    const sql = `SELECT t.*, c.nome as nome_categoria, cc.nome as nome_cartao FROM transacoes t LEFT JOIN categorias c ON t.categoria_id = c.id LEFT JOIN cartoes_de_credito cc ON t.cartao_id = cc.id WHERE TO_CHAR(t.data, 'YYYY-MM') = $1 AND t.usuario_id = $2 ORDER BY t.data DESC`;
+    const { rows } = await db.query(sql, [`${ano}-${mesFormatado}`, req.usuario.id]);
+    res.json(rows);
 });
 
 app.post('/api/transacoes', autenticarToken, async (req, res) => {
     const { descricao, valor, data, status, tipo, categoria_id, cartao_id } = req.body;
-    const result = await db.run('INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, cartao_id, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [descricao, valor, data, status, tipo, categoria_id || null, cartao_id || null, req.usuario.id]);
-    res.status(201).json({ id: result.lastID, ...req.body });
+    const sql = 'INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, cartao_id, usuario_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id';
+    const { rows } = await db.query(sql, [descricao, valor, data, status, tipo, categoria_id || null, cartao_id || null, req.usuario.id]);
+    res.status(201).json({ id: rows[0].id, ...req.body });
 });
 
 app.delete('/api/transacoes/:id', autenticarToken, async (req, res) => {
-    const { id } = req.params;
-    await db.run('DELETE FROM transacoes WHERE id = ? AND usuario_id = ?', [id, req.usuario.id]);
+    await db.query('DELETE FROM transacoes WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
     res.status(204).send();
 });
 
 app.put('/api/transacoes/:id/efetivar', autenticarToken, async (req, res) => {
-    const { id } = req.params;
-    await db.run('UPDATE transacoes SET status = "efetivado" WHERE id = ? AND usuario_id = ?', [id, req.usuario.id]);
+    await db.query('UPDATE transacoes SET status = \'efetivado\' WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
     res.status(200).json({ message: 'Transação efetivada com sucesso!' });
 });
 
 app.put('/api/transacoes/:id/prever', autenticarToken, async (req, res) => {
-    const { id } = req.params;
-    await db.run('UPDATE transacoes SET status = "previsto" WHERE id = ? AND usuario_id = ?', [id, req.usuario.id]);
+    await db.query('UPDATE transacoes SET status = \'previsto\' WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
     res.status(200).json({ message: 'Transação revertida para previsto!' });
 });
 
-
-// SEÇÃO DE ROTAS PARA GRÁFICOS (BLINDADA)
+// ROTAS DE GRÁFICOS
 app.get('/api/grafico/planejamento-anual', autenticarToken, async (req, res) => {
     const { ano } = req.query;
     let dadosAnuais = [];
     for (let mes = 1; mes <= 12; mes++) {
         const resumoMes = await calcularResumoParaMes(parseInt(ano), mes, req.usuario.id);
-        dadosAnuais.push({
-            mes: mes,
-            ganhos: resumoMes.ganhos,
-            dividas: resumoMes.dividas,
-            sobras: resumoMes.sobras
-        });
+        dadosAnuais.push({ mes, ganhos: resumoMes.ganhos, dividas: resumoMes.dividas, sobras: resumoMes.sobras });
     }
     res.json(dadosAnuais);
 });
 
 app.get('/api/grafico/compras-mensais', autenticarToken, async (req, res) => {
-    const { ano } = req.query;
-    const dadosAnuais = await db.all(`
-        SELECT strftime('%m', data) as mes, SUM(valor) as total
-        FROM transacoes
-        WHERE strftime('%Y', data) = ? AND tipo = 'despesa' AND status = 'efetivado' AND usuario_id = ?
-        GROUP BY mes
-    `, [ano, req.usuario.id]);
-    res.json(dadosAnuais);
+    const sql = `SELECT TO_CHAR(data, 'MM') as mes, SUM(valor) as total FROM transacoes WHERE TO_CHAR(data, 'YYYY') = $1 AND tipo = 'despesa' AND status = 'efetivado' AND usuario_id = $2 GROUP BY mes`;
+    const { rows } = await db.query(sql, [req.query.ano, req.usuario.id]);
+    res.json(rows);
 });
 
 app.get('/api/grafico/gastos-por-cartao', autenticarToken, async (req, res) => {
-    const { ano } = req.query;
-    const dadosCartoes = await db.all(`
-        SELECT cc.nome as cartao, SUM(t.valor) as total
-        FROM transacoes t
-        JOIN cartoes_de_credito cc ON t.cartao_id = cc.id
-        WHERE strftime('%Y', t.data) = ? AND t.tipo = 'despesa' AND t.status = 'efetivado' AND t.usuario_id = ?
-        GROUP BY cc.nome
-        HAVING SUM(t.valor) > 0
-        ORDER BY total DESC
-    `, [ano, req.usuario.id]);
-    res.json(dadosCartoes);
+    const sql = `SELECT cc.nome as cartao, SUM(t.valor) as total FROM transacoes t JOIN cartoes_de_credito cc ON t.cartao_id = cc.id WHERE TO_CHAR(t.data, 'YYYY') = $1 AND t.tipo = 'despesa' AND t.status = 'efetivado' AND t.usuario_id = $2 GROUP BY cc.nome HAVING SUM(t.valor) > 0 ORDER BY total DESC`;
+    const { rows } = await db.query(sql, [req.query.ano, req.usuario.id]);
+    res.json(rows);
 });
 
 
-// API DE LANÇAMENTOS FIXOS (BLINDADA)
+// ROTAS DE LANÇAMENTOS FIXOS, CATEGORIAS E CARTÕES... (todas adaptadas)
 app.get('/api/lancamentos-fixos', autenticarToken, async (req, res) => {
-    const lancamentos = await db.all('SELECT lf.*, c.nome as nome_categoria FROM lancamentos_fixos lf LEFT JOIN categorias c ON lf.categoria_id = c.id WHERE lf.usuario_id = ? ORDER BY lf.tipo, lf.descricao', [req.usuario.id]);
-    res.json(lancamentos);
+    const sql = 'SELECT lf.*, c.nome as nome_categoria FROM lancamentos_fixos lf LEFT JOIN categorias c ON lf.categoria_id = c.id WHERE lf.usuario_id = $1 ORDER BY lf.tipo, lf.descricao';
+    const { rows } = await db.query(sql, [req.usuario.id]);
+    res.json(rows);
 });
 
-// ############# INÍCIO DA ALTERAÇÃO 1 #############
 app.post('/api/lancamentos-fixos', autenticarToken, async (req, res) => {
     const { descricao, valor, tipo, dia_do_mes, categoria_id } = req.body;
-    const usuarioId = req.usuario.id;
+    const { id: usuarioId } = req.usuario;
 
-    // 1. Insere o lançamento fixo (a "regra")
-    const result = await db.run('INSERT INTO lancamentos_fixos (descricao, valor, tipo, dia_do_mes, categoria_id, usuario_id) VALUES (?, ?, ?, ?, ?, ?)', [descricao, valor, tipo, dia_do_mes, categoria_id || null, usuarioId]);
+    const sqlLf = 'INSERT INTO lancamentos_fixos (descricao, valor, tipo, dia_do_mes, categoria_id, usuario_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id';
+    const { rows } = await db.query(sqlLf, [descricao, valor, tipo, dia_do_mes, categoria_id || null, usuarioId]);
     
-    // --- ADIÇÃO INTELIGENTE ---
-    // 2. Cria a transação PREVISTA para o mês atual imediatamente
     const hoje = new Date();
-    const anoAtual = hoje.getFullYear();
-    const mesAtual = String(hoje.getMonth() + 1).padStart(2, '0');
-    const diaFormatado = String(dia_do_mes).padStart(2, '0');
-    const dataLancamento = `${anoAtual}-${mesAtual}-${diaFormatado}`;
+    const dataLancamento = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(dia_do_mes).padStart(2, '0')}`;
+    const sqlTransacao = 'INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id) VALUES ($1, $2, $3, \'previsto\', $4, $5, TRUE, $6)';
+    await db.query(sqlTransacao, [descricao, valor, dataLancamento, tipo, categoria_id || null, usuarioId]);
 
-    await db.run(
-        'INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id) VALUES (?, ?, ?, "previsto", ?, ?, 1, ?)',
-        [descricao, valor, dataLancamento, tipo, categoria_id || null, usuarioId]
-    );
-    // --- FIM DA ADIÇÃO ---
-
-    res.status(201).json({ id: result.lastID, ...req.body });
+    res.status(201).json({ id: rows[0].id, ...req.body });
 });
-// ############# FIM DA ALTERAÇÃO 1 #############
 
-
-// ############# INÍCIO DA ALTERAÇÃO 2 #############
 app.delete('/api/lancamentos-fixos/:id', autenticarToken, async (req, res) => {
     const { id } = req.params;
-    const usuarioId = req.usuario.id;
+    const { id: usuarioId } = req.usuario;
 
-    // --- ADIÇÃO INTELIGENTE ---
-    // 1. Pega a descrição do lançamento fixo antes de deletar
-    const lancamentoFixo = await db.get('SELECT descricao FROM lancamentos_fixos WHERE id = ? AND usuario_id = ?', [id, usuarioId]);
-    
-    // 2. Se encontrou, deleta as transações futuras baseadas nele
-    if (lancamentoFixo) {
+    const { rows } = await db.query('SELECT descricao FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
+    if (rows.length > 0) {
+        const lancamentoFixo = rows[0];
         const hojeFormatado = new Date().toISOString().split('T')[0];
-        await db.run(
-            "DELETE FROM transacoes WHERE descricao = ? AND gerado_automaticamente = 1 AND status = 'previsto' AND data >= ? AND usuario_id = ?",
-            [lancamentoFixo.descricao, hojeFormatado, usuarioId]
-        );
+        await db.query("DELETE FROM transacoes WHERE descricao = $1 AND gerado_automaticamente = TRUE AND status = 'previsto' AND data >= $2 AND usuario_id = $3", [lancamentoFixo.descricao, hojeFormatado, usuarioId]);
     }
-    // --- FIM DA ADIÇÃO ---
-
-    // 3. Deleta o lançamento fixo (a "regra")
-    await db.run('DELETE FROM lancamentos_fixos WHERE id = ? AND usuario_id = ?', [id, usuarioId]);
-
+    
+    await db.query('DELETE FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
     res.status(204).send();
 });
-// ############# FIM DA ALTERAÇÃO 2 #############
 
-
-// API DE CATEGORIAS (BLINDADA)
+// CATEGORIAS
 app.get('/api/categorias', autenticarToken, async (req, res) => {
-    const categorias = await db.all('SELECT * FROM categorias WHERE usuario_id = ? ORDER BY nome', [req.usuario.id]);
-    res.json(categorias);
+    const { rows } = await db.query('SELECT * FROM categorias WHERE usuario_id = $1 ORDER BY nome', [req.usuario.id]);
+    res.json(rows);
 });
 
 app.post('/api/categorias', autenticarToken, async (req, res) => {
     const { nome } = req.body;
-    const result = await db.run('INSERT INTO categorias (nome, usuario_id) VALUES (?, ?)', [nome, req.usuario.id]);
-    res.status(201).json({ id: result.lastID, nome });
+    const { rows } = await db.query('INSERT INTO categorias (nome, usuario_id) VALUES ($1, $2) RETURNING id, nome', [nome, req.usuario.id]);
+    res.status(201).json(rows[0]);
 });
 
 app.delete('/api/categorias/:id', autenticarToken, async (req, res) => {
-    const { id } = req.params;
-    await db.run('DELETE FROM categorias WHERE id = ? AND usuario_id = ?', [id, req.usuario.id]);
+    await db.query('DELETE FROM categorias WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
     res.status(204).send();
 });
 
-
-// API DE CARTÕES DE CRÉDITO (BLINDADA)
+// CARTÕES DE CRÉDITO
 app.get('/api/cartoes', autenticarToken, async (req, res) => {
-    const cartoes = await db.all('SELECT * FROM cartoes_de_credito WHERE usuario_id = ? ORDER BY nome', [req.usuario.id]);
-    res.json(cartoes);
+    const { rows } = await db.query('SELECT * FROM cartoes_de_credito WHERE usuario_id = $1 ORDER BY nome', [req.usuario.id]);
+    res.json(rows);
 });
 
 app.post('/api/cartoes', autenticarToken, async (req, res) => {
     const { nome } = req.body;
-    const result = await db.run('INSERT INTO cartoes_de_credito (nome, usuario_id) VALUES (?, ?)', [nome, req.usuario.id]);
-    res.status(201).json({ id: result.lastID, nome });
+    const { rows } = await db.query('INSERT INTO cartoes_de_credito (nome, usuario_id) VALUES ($1, $2) RETURNING id, nome', [nome, req.usuario.id]);
+    res.status(201).json(rows[0]);
 });
 
 app.delete('/api/cartoes/:id', autenticarToken, async (req, res) => {
-    const { id } = req.params;
-    await db.run('DELETE FROM cartoes_de_credito WHERE id = ? AND usuario_id = ?', [id, req.usuario.id]);
+    await db.query('DELETE FROM cartoes_de_credito WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
     res.status(204).send();
 });
 
 
 // INICIA O SERVIDOR
 app.listen(PORT, () => {
-    console.log(`Servidor rodando`);
+    console.log(`Servidor rodando na porta ${PORT}`);
 });

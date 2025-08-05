@@ -110,7 +110,7 @@
         
         function popularSeletorAno() {
             const anoAtual = new Date().getFullYear();
-            for (let i = anoAtual + 1; i >= anoAtual - 5; i--) {
+            for (let i = anoAtual + 5; i >= anoAtual; i--) {
                 const option = document.createElement('option');
                 option.value = i;
                 option.textContent = i;

@@ -75,7 +75,6 @@
             window.location.href = './login.html';
         }
         
-        // A constante API_URL foi removida daqui, pois agora vem do config.js
         const seletorAno = document.getElementById('seletor-ano');
         const inputMeta = document.getElementById('input-meta');
         let graficoPlanejamento, graficoCompras, graficoCartoes;
@@ -102,28 +101,19 @@
             inputMeta.addEventListener('change', carregarTodosGraficos);
         });
         
-        // --- ALTERAÇÃO: Função inteira substituída pela versão inteligente ---
+        // --- ALTERAÇÃO: Função inteira substituída pela versão SIMPLES E FIXA ---
         function popularSeletorAno() {
-            const anoAtual = new Date().getFullYear();
-
-            // Pega os dados do usuário guardados no login
-            const usuario = JSON.parse(localStorage.getItem('usuario'));
-
-            // Define o ano de início: ou o ano de cadastro do usuário, ou o ano atual como padrão
-            const anoInicio = usuario && usuario.data_cadastro 
-                ? new Date(usuario.data_cadastro).getFullYear() 
-                : anoAtual;
-            
             seletorAno.innerHTML = ''; // Limpa opções antigas
 
-            // Popula o seletor de Ano com a nova lógica
-            for (let i = anoAtual + 5; i >= anoInicio; i--) {
+            // Popula o seletor de Ano com um período FIXO
+            for (let i = 2028; i >= 2025; i--) {
                 const option = document.createElement('option');
                 option.value = i;
                 option.textContent = i;
                 seletorAno.appendChild(option);
             }
-            seletorAno.value = anoAtual;
+            // Define 2025 como o ano padrão
+            seletorAno.value = 2025;
         }
 
         function carregarTodosGraficos() {

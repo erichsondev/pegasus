@@ -31,14 +31,13 @@ db.connect()
     });
 
 const criarTabelasSeNaoExistirem = async () => {
-    // --- ALTERAÇÃO 1: Adicionada a coluna data_cadastro ---
+    // --- REVERSÃO 1: A coluna data_cadastro foi removida ---
     const criarTabelaUsuarios = `
         CREATE TABLE IF NOT EXISTS usuarios (
             id SERIAL PRIMARY KEY,
             nome TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE,
-            senha_hash TEXT NOT NULL,
-            data_cadastro DATE DEFAULT CURRENT_DATE
+            senha_hash TEXT NOT NULL
         );
     `;
 
@@ -214,14 +213,13 @@ app.post('/api/usuarios/login', async (req, res) => {
     }
     const token = jwt.sign({ id: usuario.id, nome: usuario.nome }, process.env.JWT_SECRET, { expiresIn: '8h' });
     
-    // --- ALTERAÇÃO 2: Adicionando a data_cadastro ao objeto de resposta ---
+    // --- REVERSÃO 2: O objeto de resposta volta a ser simples ---
     res.json({
         token,
         usuario: {
             id: usuario.id,
             nome: usuario.nome,
-            email: usuario.email,
-            data_cadastro: usuario.data_cadastro
+            email: usuario.email
         }
     });
 });
@@ -262,8 +260,6 @@ app.put('/api/transacoes/:id/prever', autenticarToken, async (req, res) => {
     await db.query('UPDATE transacoes SET status = \'previsto\' WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
     res.status(200).json({ message: 'Transação revertida para previsto!' });
 });
-
-// ... (O restante das rotas de gráficos, lançamentos fixos, etc., continua igual) ...
 
 // ROTAS DE GRÁFICOS
 app.get('/api/grafico/planejamento-anual', autenticarToken, async (req, res) => {

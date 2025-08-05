@@ -99,8 +99,7 @@
         if (!token) {
             window.location.href = './login.html';
         }
-
-        // A constante API_URL foi removida daqui, pois agora vem do config.js
+        
         const seletorMes = document.getElementById('seletor-mes');
         const seletorAno = document.getElementById('seletor-ano');
         const tituloPagina = document.getElementById('titulo-pagina');
@@ -167,20 +166,8 @@
             document.getElementById('valor-saldo-final').textContent = formatarMoeda(resumo.saldoFinalProjetado);
         }
 
-        // --- ALTERAÇÃO: Função inteira substituída pela versão inteligente ---
+        // --- ALTERAÇÃO: Função inteira substituída pela versão SIMPLES E FIXA ---
         function popularSeletoresDeData() {
-            const hoje = new Date();
-            const anoAtual = hoje.getFullYear();
-            const mesAtual = hoje.getMonth();
-            
-            // Pega os dados do usuário guardados no login
-            const usuario = JSON.parse(localStorage.getItem('usuario'));
-            
-            // Define o ano de início: ou o ano de cadastro do usuário, ou o ano atual como padrão
-            const anoInicio = usuario && usuario.data_cadastro 
-                ? new Date(usuario.data_cadastro).getFullYear() 
-                : anoAtual;
-
             // Popula o seletor de Mês
             const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
             seletorMes.innerHTML = '';
@@ -190,24 +177,19 @@
                 option.textContent = mes;
                 seletorMes.appendChild(option);
             });
-            // Define o mês atual como padrão
-            // Para você, como pediu, será Agosto. Para novos usuários, o mês atual.
-            const dataImplantacao = new Date('2025-08-01');
-            if (anoAtual === dataImplantacao.getFullYear() && mesAtual < dataImplantacao.getMonth()) {
-                 seletorMes.value = dataImplantacao.getMonth() + 1; // Agosto
-            } else {
-                 seletorMes.value = mesAtual + 1;
-            }
+            // Define AGOSTO como o mês padrão
+            seletorMes.value = 8;
 
-            // Popula o seletor de Ano com a nova lógica
+            // Popula o seletor de Ano com um período FIXO
             seletorAno.innerHTML = '';
-            for (let i = anoAtual + 5; i >= anoInicio; i--) {
+            for (let i = 2028; i >= 2025; i--) {
                 const option = document.createElement('option');
                 option.value = i;
                 option.textContent = i;
                 seletorAno.appendChild(option);
             }
-            seletorAno.value = anoAtual;
+            // Define 2025 como o ano padrão
+            seletorAno.value = 2025;
 
             // Atualiza a data do formulário para o mês/ano selecionado
             atualizarDataFormulario();

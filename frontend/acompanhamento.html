@@ -135,22 +135,64 @@
             window.location.href = './login.html';
         }
 
-        // Todo o seu script original vem na sequência
         const API_URL = 'https://pegasus-backend-57kd.onrender.com/api'; // Sua URL correta
         const seletorMes = document.getElementById('seletor-mes');
         const seletorAno = document.getElementById('seletor-ano');
         const tituloPagina = document.getElementById('titulo-pagina');
         const formTransacao = document.getElementById('form-transacao');
-        // ALTERAÇÃO: A constante do botão foi removida
         
-        // ADIÇÃO: Agora, todas as chamadas para a API precisam enviar o "crachá"
         const headers = {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
         };
 
+        // --- CÓDIGO ALTERADO ---
+        // NOVO: Função para atualizar os meses de acordo com o ano selecionado
+        function atualizarOpcoesDeMes() {
+            const anoSelecionado = parseInt(seletorAno.value);
+            const hoje = new Date();
+            const anoAtual = hoje.getFullYear();
+            const mesAtual = hoje.getMonth(); // 0 para Janeiro, 7 para Agosto
+            const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+            seletorMes.innerHTML = ''; // Limpa as opções de meses anteriores
+
+            let mesDePartida = 0; // Padrão: começa em Janeiro
+
+            // Se o ano selecionado for o ano atual (2025), o mês de partida será o atual (Agosto)
+            if (anoSelecionado === anoAtual) {
+                mesDePartida = mesAtual;
+            }
+
+            for (let i = mesDePartida; i < 12; i++) {
+                const option = document.createElement('option');
+                option.value = i + 1; // O valor do mês é de 1 a 12
+                option.textContent = meses[i];
+                seletorMes.appendChild(option);
+            }
+        }
+
+        // ALTERADO: Função principal de popular os seletores foi ajustada
+        function popularSeletoresDeData() {
+            const hoje = new Date();
+            const anoAtual = hoje.getFullYear();
+            document.getElementById('data').valueAsDate = hoje;
+
+            // Popula os anos (2025 a 2030)
+            for (let i = anoAtual + 5; i >= anoAtual; i--) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = i;
+                seletorAno.appendChild(option);
+            }
+            seletorAno.value = anoAtual;
+
+            // Popula os meses pela primeira vez com base no ano atual
+            atualizarOpcoesDeMes();
+        }
+        
+        // ALTERADO: A inicialização e os eventos foram reorganizados
         document.addEventListener('DOMContentLoaded', () => {
-            // ADIÇÃO: Lógica de saudação e botão de sair
             const usuario = JSON.parse(localStorage.getItem('usuario'));
             if (usuario && usuario.nome) {
                 document.getElementById('saudacao-usuario').textContent = `Olá, ${usuario.nome}!`;
@@ -161,19 +203,24 @@
                 window.location.href = './login.html';
             });
 
-            // O resto do seu código original
             popularDropdowns();
             popularSeletoresDeData();
             buscarDados();
+
             document.getElementById('tipo').addEventListener('change', (e) => {
                 document.getElementById('cartao-group').style.display = e.target.value === 'despesa' ? 'block' : 'none';
             });
+
+            // Quando o ANO mudar, atualiza os meses e depois busca os dados
+            seletorAno.addEventListener('change', () => {
+                atualizarOpcoesDeMes();
+                buscarDados();
+            });
+
+            // Quando o MÊS mudar, apenas busca os dados
             seletorMes.addEventListener('change', buscarDados);
-            seletorAno.addEventListener('change', buscarDados);
-            // ALTERAÇÃO: O EventListener do botão foi removido
         });
-        
-        // ALTERAÇÃO: A função 'sincronizarLancamentosFixos' foi totalmente removida.
+        // --- FIM DO CÓDIGO ALTERADO ---
 
         function buscarDados() {
             buscarTransacoes();
@@ -183,7 +230,7 @@
         async function buscarResumo() {
             const mes = seletorMes.value;
             const ano = seletorAno.value;
-            const resumo = await fetch(`${API_URL}/resumo?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json()); // Adicionado aqui
+            const resumo = await fetch(`${API_URL}/resumo?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json());
             const formatarMoeda = (valor) => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             
             document.getElementById('valor-receitas-efetivadas').textContent = formatarMoeda(resumo.totalReceitasEfetivadas);
@@ -195,30 +242,8 @@
             document.getElementById('valor-saldo-final').textContent = formatarMoeda(resumo.saldoFinalProjetado);
         }
 
-        function popularSeletoresDeData() {
-            const hoje = new Date();
-            const mesAtual = hoje.getMonth();
-            const anoAtual = hoje.getFullYear();
-            document.getElementById('data').valueAsDate = hoje;
-            const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-            meses.forEach((mes, index) => {
-                const option = document.createElement('option');
-                option.value = index + 1;
-                option.textContent = mes;
-                seletorMes.appendChild(option);
-            });
-            seletorMes.value = mesAtual + 1;
-            for (let i = anoAtual + 5; i >= anoAtual; i--) {
-                const option = document.createElement('option');
-                option.value = i;
-                option.textContent = i;
-                seletorAno.appendChild(option);
-            }
-            seletorAno.value = anoAtual;
-        }
-
         async function popularDropdowns() {
-            const categorias = await fetch(`${API_URL}/categorias`, { headers }).then(res => res.json()); // Adicionado aqui
+            const categorias = await fetch(`${API_URL}/categorias`, { headers }).then(res => res.json());
             const selectCategoria = document.getElementById('categoria');
             selectCategoria.innerHTML = '<option value="">Nenhuma</option>';
             categorias.forEach(cat => {
@@ -227,7 +252,7 @@
                 option.textContent = cat.nome;
                 selectCategoria.appendChild(option);
             });
-            const cartoes = await fetch(`${API_URL}/cartoes`, { headers }).then(res => res.json()); // Adicionado aqui
+            const cartoes = await fetch(`${API_URL}/cartoes`, { headers }).then(res => res.json());
             const selectCartao = document.getElementById('cartao');
             selectCartao.innerHTML = '<option value="">Nenhum</option>';
             cartoes.forEach(cart => {
@@ -243,7 +268,7 @@
             const ano = seletorAno.value;
             const nomeMes = seletorMes.options[seletorMes.selectedIndex].text;
             tituloPagina.textContent = `📊 Acompanhamento de ${nomeMes}/${ano}`;
-            const transacoes = await fetch(`${API_URL}/transacoes?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json()); // Adicionado aqui
+            const transacoes = await fetch(`${API_URL}/transacoes?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json());
             const tbody = document.getElementById('tabela-transacoes');
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Nenhuma transação para este período.</td></tr>';
             if (transacoes.length > 0) {
@@ -283,7 +308,7 @@
         formTransacao.addEventListener('submit', async (e) => {
             e.preventDefault();
             const transacao = { tipo: document.getElementById('tipo').value, descricao: document.getElementById('descricao').value, valor: parseFloat(document.getElementById('valor').value), data: document.getElementById('data').value, categoria_id: document.getElementById('categoria').value, cartao_id: document.getElementById('cartao').value, status: document.getElementById('status').value };
-            await fetch(`${API_URL}/transacoes`, { method: 'POST', headers: headers, body: JSON.stringify(transacao) }); // Adicionado aqui
+            await fetch(`${API_URL}/transacoes`, { method: 'POST', headers: headers, body: JSON.stringify(transacao) });
             formTransacao.reset();
             document.getElementById('data').valueAsDate = new Date();
             buscarDados();
@@ -291,18 +316,18 @@
 
         async function deletarTransacao(id) {
             if (confirm('Tem certeza que deseja remover esta transação? Esta ação não pode ser desfeita.')) {
-                await fetch(`${API_URL}/transacoes/${id}`, { method: 'DELETE', headers: headers }); // Adicionado aqui
+                await fetch(`${API_URL}/transacoes/${id}`, { method: 'DELETE', headers: headers });
                 buscarDados();
             }
         }
 
         async function efetivarTransacao(id) {
-            await fetch(`${API_URL}/transacoes/${id}/efetivar`, { method: 'PUT', headers: headers }); // Adicionado aqui
+            await fetch(`${API_URL}/transacoes/${id}/efetivar`, { method: 'PUT', headers: headers });
             buscarDados();
         }
 
         async function preverTransacao(id) {
-            await fetch(`${API_URL}/transacoes/${id}/prever`, { method: 'PUT', headers: headers }); // Adicionado aqui
+            await fetch(`${API_URL}/transacoes/${id}/prever`, { method: 'PUT', headers: headers });
             buscarDados();
         }
     </script>

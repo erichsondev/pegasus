@@ -185,21 +185,7 @@ app.post('/api/usuarios/recuperar-senha', asyncHandler(async (req, res) => {
             from: `"Pegasus Finance" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: 'Recuperação de Senha - Pegasus Finance',
-            html: `
-                <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;">
-                    <h2 style="color: #007bff;">Olá, ${usuario.nome}!</h2>
-                    <p>Recebemos uma solicitação para redefinir sua senha no Pegasus Finance.</p>
-                    <p>Se foi você, clique no botão abaixo para criar uma nova senha. Este link é válido por 1 hora.</p>
-                    <p style="margin: 30px 0; text-align: center;">
-                        <a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
-                            Redefinir Minha Senha
-                        </a>
-                    </p>
-                    <p>Se você não solicitou isso, pode ignorar este e-mail com segurança. Nenhuma alteração será feita na sua conta.</p>
-                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                    <p style="font-size: 0.9em; color: #777;">Atenciosamente,<br><b>Equipe Pegasus Finance</b></p>
-                </div>
-            `
+            html: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;"><h2 style="color: #007bff;">Olá, ${usuario.nome}!</h2><p>Recebemos uma solicitação para redefinir sua senha no Pegasus Finance.</p><p>Se foi você, clique no botão abaixo para criar uma nova senha. Este link é válido por 1 hora.</p><p style="margin: 30px 0; text-align: center;"><a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Redefinir Minha Senha</a></p><p>Se você não solicitou isso, pode ignorar este e-mail com segurança. Nenhuma alteração será feita na sua conta.</p><hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;"><p style="font-size: 0.9em; color: #777;">Atenciosamente,<br><b>Equipe Pegasus Finance</b></p></div>`
         };
         await transporter.sendMail(mailOptions);
         console.log(`E-mail de recuperação enviado para ${email}`);
@@ -307,10 +293,8 @@ rotasProtegidas.post('/lancamentos-fixos', asyncHandler(async (req, res) => {
     const { descricao, valor, tipo, dia_do_mes, categoria_id, data_inicio, data_fim } = req.body;
     const sql = 'INSERT INTO lancamentos_fixos (descricao, valor, tipo, dia_do_mes, categoria_id, usuario_id, data_inicio, data_fim) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id';
     const { rows } = await db.query(sql, [descricao, valor, tipo, dia_do_mes, categoria_id || null, req.usuario.id, data_inicio, data_fim || null]);
-    
     const hoje = new Date();
     await gerarLancamentosPrevistos(hoje.getFullYear(), hoje.getMonth() + 1, req.usuario.id);
-
     res.status(201).json({ id: rows[0].id });
 }));
 

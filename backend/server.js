@@ -120,6 +120,9 @@ async function calcularResumoParaMes(ano, mes, usuarioId, profundidade = 0) {
 
     let mesAnterior = mes - 1, anoAnterior = ano;
     if (mesAnterior === 0) { mesAnterior = 12; anoAnterior--; }
+    
+    // Evita recursão infinita se estivermos muito no passado
+    if (profundidade > 48) return { saldoFinalProjetado: 0 };
 
     const resumoAnterior = await calcularResumoParaMes(anoAnterior, mesAnterior, usuarioId, profundidade + 1);
     const saldoInicial = resumoAnterior.saldoFinalProjetado;
@@ -259,26 +262,83 @@ rotasProtegidas.put('/transacoes/:id/prever', asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'Transação revertida para previsto!' });
 }));
 
-rotasProtegidas.get('/grafico/receita-vs-despesa', asyncHandler(async (req, res) => {
+// --- INÍCIO DA CORREÇÃO DOS GRÁFICOS ---
+rotasProtegidas.get('/grafico/evolucao-patrimonial', asyncHandler(async (req, res) => {
     const { inicio, fim } = req.query;
-    const sql = `SELECT TO_CHAR(data, 'YYYY-MM') AS mes, SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END) AS receitas, SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE 0 END) AS despesas FROM transacoes WHERE usuario_id = $1 AND data BETWEEN $2 AND $3 AND status = 'efetivado' GROUP BY mes ORDER BY mes;`;
-    const { rows } = await db.query(sql, [req.usuario.id, inicio, fim]);
-    res.json(rows);
+    const usuarioId = req.usuario.id;
+
+    // 1. Calcular o saldo inicial antes do período do gráfico
+    const dataInicioObj = new Date(inicio + 'T00:00:00');
+    let anoAnterior = dataInicioObj.getFullYear();
+    let mesAnterior = dataInicioObj.getMonth(); // getMonth() é 0-11, então mês anterior é só subtrair
+    if (mesAnterior === 0) {
+        mesAnterior = 12;
+        anoAnterior--;
+    }
+    const resumoAnterior = await calcularResumoParaMes(anoAnterior, mesAnterior, usuarioId);
+    let saldoAcumulado = resumoAnterior.saldoFinalProjetado;
+
+    // 2. Obter os totais mensais de receitas e despesas para o período do gráfico
+    const sql = `
+        SELECT 
+            TO_CHAR(data, 'YYYY-MM') AS mes,
+            SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END) AS receitas,
+            SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE 0 END) AS despesas
+        FROM transacoes 
+        WHERE usuario_id = $1 AND data BETWEEN $2 AND $3
+        GROUP BY mes 
+        ORDER BY mes;
+    `;
+    const { rows: totaisMensais } = await db.query(sql, [usuarioId, inicio, fim]);
+
+    // 3. Calcular o saldo acumulado para cada mês no período
+    const dadosGrafico = totaisMensais.map(item => {
+        saldoAcumulado += item.receitas - item.despesas;
+        return {
+            mes: item.mes,
+            receitas: item.receitas,
+            despesas: item.despesas,
+            saldo_acumulado: saldoAcumulado
+        };
+    });
+
+    res.json(dadosGrafico);
 }));
 
 rotasProtegidas.get('/grafico/despesas-por-categoria', asyncHandler(async (req, res) => {
     const { inicio, fim } = req.query;
-    const sql = `SELECT c.nome AS categoria, SUM(t.valor) AS total FROM transacoes t JOIN categorias c ON t.categoria_id = c.id WHERE t.usuario_id = $1 AND t.data BETWEEN $2 AND $3 AND t.tipo = 'despesa' AND t.status = 'efetivado' AND c.analitico = TRUE GROUP BY c.nome HAVING SUM(t.valor) > 0 ORDER BY total DESC;`;
+    const sql = `
+        SELECT c.nome AS categoria, SUM(t.valor) AS total 
+        FROM transacoes t JOIN categorias c ON t.categoria_id = c.id 
+        WHERE t.usuario_id = $1 
+        AND t.data BETWEEN $2 AND $3 
+        AND t.tipo = 'despesa' 
+        AND c.analitico = TRUE 
+        GROUP BY c.nome 
+        HAVING SUM(t.valor) > 0 
+        ORDER BY total DESC;
+    `;
     const { rows } = await db.query(sql, [req.usuario.id, inicio, fim]);
     res.json(rows);
 }));
 
 rotasProtegidas.get('/grafico/gastos-por-cartao', asyncHandler(async (req, res) => {
     const { inicio, fim } = req.query;
-    const sql = `SELECT cc.nome AS cartao, SUM(t.valor) AS total FROM transacoes t JOIN cartoes_de_credito cc ON t.cartao_id = cc.id WHERE t.data BETWEEN $1 AND $2 AND t.tipo = 'despesa' AND t.status = 'efetivado' AND t.usuario_id = $3 GROUP BY cc.nome HAVING SUM(t.valor) > 0 ORDER BY total DESC;`;
+    const sql = `
+        SELECT cc.nome AS cartao, SUM(t.valor) AS total 
+        FROM transacoes t JOIN cartoes_de_credito cc ON t.cartao_id = cc.id 
+        WHERE t.data BETWEEN $1 AND $2 
+        AND t.tipo = 'despesa'
+        AND t.usuario_id = $3 
+        GROUP BY cc.nome 
+        HAVING SUM(t.valor) > 0 
+        ORDER BY total DESC;
+    `;
     const { rows } = await db.query(sql, [inicio, fim, req.usuario.id]);
     res.json(rows);
 }));
+// --- FIM DA CORREÇÃO DOS GRÁFICOS ---
+
 
 rotasProtegidas.get('/lancamentos-fixos', asyncHandler(async (req, res) => {
     const sql = 'SELECT lf.*, c.nome as nome_categoria FROM lancamentos_fixos lf LEFT JOIN categorias c ON lf.categoria_id = c.id WHERE lf.usuario_id = $1 ORDER BY lf.tipo, lf.descricao';
@@ -286,22 +346,18 @@ rotasProtegidas.get('/lancamentos-fixos', asyncHandler(async (req, res) => {
     res.json(rows);
 }));
 
-// --- INÍCIO DA CORREÇÃO ---
 rotasProtegidas.post('/lancamentos-fixos', asyncHandler(async (req, res) => {
     const { descricao, valor, tipo, dia_do_mes, categoria_id, data_inicio, data_fim } = req.body;
     const sql = 'INSERT INTO lancamentos_fixos (descricao, valor, tipo, dia_do_mes, categoria_id, usuario_id, data_inicio, data_fim) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id';
     const { rows } = await db.query(sql, [descricao, valor, tipo, dia_do_mes, categoria_id || null, req.usuario.id, data_inicio, data_fim || null]);
     
-    // Deleta todas as transações futuras com status 'previsto' para forçar a regeneração.
     await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND data >= NOW()::date AND usuario_id = $1", [req.usuario.id]);
 
-    // Agora, regenera os lançamentos para o mês atual, que agora incluirá o novo item.
     const hoje = new Date();
     await gerarLancamentosPrevistos(hoje.getFullYear(), hoje.getMonth() + 1, req.usuario.id);
     
     res.status(201).json({ id: rows[0].id });
 }));
-// --- FIM DA CORREÇÃO ---
 
 
 rotasProtegidas.delete('/lancamentos-fixos/:id', asyncHandler(async (req, res) => {

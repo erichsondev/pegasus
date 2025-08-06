@@ -120,9 +120,7 @@
             <div class="card" id="form-card">
                 <h2 id="form-titulo">Nova Transação</h2> -->
                 <form id="form-transacao">
-                    : Campo oculto para guardar o ID da transação em edição -->
                     <input type="hidden" id="transacao-id">
-
                     <div class="form-group"><label for="tipo">Tipo</label><select id="tipo" required><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
                     <div class="form-group"><label for="descricao">Descrição</label><input type="text" id="descricao" required></div>
                     <div class="form-group"><label for="valor">Valor (R$)</label><input type="number" step="0.01" id="valor" required></div>
@@ -130,8 +128,6 @@
                     <div class="form-group"><label for="categoria">Categoria</label><select id="categoria"><option value="">Nenhuma</option></select></div>
                     <div class="form-group" id="cartao-group"><label for="cartao">Cartão de Crédito</label><select id="cartao"><option value="">Nenhum</option></select></div>
                     <div class="form-group"><label for="status">Status</label><select id="status" required><option value="efetivado">Efetivado</option><option value="previsto">Previsto</option></select></div>
-                    
-                    : Container para os botões de ação do formulário -->
                     <div class="form-actions">
                         <button type="submit" id="btn-submit-form">Adicionar Transação</button>
                         <button type="button" id="btn-cancel-edit">Cancelar Edição</button>

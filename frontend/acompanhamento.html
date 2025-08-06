@@ -183,18 +183,17 @@
             document.getElementById('data').valueAsDate = hoje;
         }
 
-        // --- LÓGICA PRINCIPAL DE BUSCA DE DADOS (PERFORMANCE MELHORADA) ---
-        function buscarDados() {
-            const loadingPromises = [
-                buscarTransacoes(),
-                buscarResumo()
-            ];
-
-            // Roda as duas buscas em paralelo e trata qualquer erro
-            Promise.all(loadingPromises).catch(err => {
+        // --- LÓGICA PRINCIPAL DE BUSCA DE DADOS (CORRIGIDA) ---
+        async function buscarDados() {
+            try {
+                // Primeiro, busca o resumo (e gera os lançamentos, se necessário)
+                await buscarResumo();
+                // Somente depois, busca a lista de transações
+                await buscarTransacoes();
+            } catch (err) {
                 console.error("Erro ao carregar dados da página:", err);
                 alert("Ocorreu um erro ao carregar os dados. Tente novamente.");
-            });
+            }
         }
         
         // --- FUNÇÕES DE LÓGICA (MAIORIA INALTERADA, MAS CHAMADAS PELO buscarDados) ---

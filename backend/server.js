@@ -73,27 +73,21 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
         const { rows: existentes } = await db.query(existentesQuery, [dataVerificacao, usuarioId]);
         if (existentes.length > 0) return;
 
-        // --- INÍCIO DA CORREÇÃO ---
         const primeiroDiaDoMesString = `${ano}-${mesFormatado}-01`;
-        // Calcula o último dia do mês para a consulta SQL
         const ultimoDiaDoMes = new Date(ano, mes, 0).getDate();
         const ultimoDiaDoMesString = `${ano}-${mesFormatado}-${ultimoDiaDoMes}`;
         
-        // A consulta SQL foi corrigida para verificar se o período de vigência do lançamento
-        // cruza com o mês atual.
         const lancamentosFixosQuery = `
             SELECT * FROM lancamentos_fixos 
             WHERE usuario_id = $1 
-            AND data_inicio <= $2::date -- A vigência deve começar ANTES ou NO ÚLTIMO dia do mês
-            AND (data_fim IS NULL OR data_fim >= $3::date) -- E terminar DEPOIS ou NO PRIMEIRO dia do mês
+            AND data_inicio <= $2::date
+            AND (data_fim IS NULL OR data_fim >= $3::date)
         `;
         const { rows: lancamentosFixos } = await db.query(lancamentosFixosQuery, [usuarioId, ultimoDiaDoMesString, primeiroDiaDoMesString]);
-        // --- FIM DA CORREÇÃO ---
         
         if (lancamentosFixos.length === 0) return;
 
         for (const fixo of lancamentosFixos) {
-            // A lógica de inserção permanece a mesma, pois já usa ultimoDiaDoMes corretamente.
             const dia = Math.min(fixo.dia_do_mes, ultimoDiaDoMes);
             const dataLancamento = `${ano}-${mesFormatado}-${String(dia).padStart(2, '0')}`;
             const insertQuery = 'INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id) VALUES ($1, $2, $3, \'previsto\', $4, $5, TRUE, $6)';
@@ -292,14 +286,23 @@ rotasProtegidas.get('/lancamentos-fixos', asyncHandler(async (req, res) => {
     res.json(rows);
 }));
 
+// --- INÍCIO DA CORREÇÃO ---
 rotasProtegidas.post('/lancamentos-fixos', asyncHandler(async (req, res) => {
     const { descricao, valor, tipo, dia_do_mes, categoria_id, data_inicio, data_fim } = req.body;
     const sql = 'INSERT INTO lancamentos_fixos (descricao, valor, tipo, dia_do_mes, categoria_id, usuario_id, data_inicio, data_fim) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id';
     const { rows } = await db.query(sql, [descricao, valor, tipo, dia_do_mes, categoria_id || null, req.usuario.id, data_inicio, data_fim || null]);
+    
+    // Deleta todas as transações futuras com status 'previsto' para forçar a regeneração.
+    await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND data >= NOW()::date AND usuario_id = $1", [req.usuario.id]);
+
+    // Agora, regenera os lançamentos para o mês atual, que agora incluirá o novo item.
     const hoje = new Date();
     await gerarLancamentosPrevistos(hoje.getFullYear(), hoje.getMonth() + 1, req.usuario.id);
+    
     res.status(201).json({ id: rows[0].id });
 }));
+// --- FIM DA CORREÇÃO ---
+
 
 rotasProtegidas.delete('/lancamentos-fixos/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;

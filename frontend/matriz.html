@@ -95,7 +95,7 @@
         const token = localStorage.getItem('token');
         if (!token) window.location.href = './login.html';
 
-        const API_URL = 'https://pegasus-weld.onrender.com/api'; 
+        const API_URL = 'https://pegasus-backend-al0z.onrender.com/api'; 
         const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
 
         const handleApiError = (error, action) => {

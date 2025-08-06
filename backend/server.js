@@ -1,7 +1,7 @@
 /*
  * =================================================================
  * PEGASUS FINANCE 2.0
- * SERVER-SIDE LOGIC (VERSÃO FINAL COM CORREÇÃO DE FUSO HORÁRIO)
+ * SERVER-SIDE LOGIC (VERSÃO FINAL COM CORREÇÃO DE FUSO HORÁRIO E VIGÊNCIA)
  * =================================================================
  */
 
@@ -9,7 +9,7 @@
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const jwt =require('jsonwebtoken');
 const { Pool } = require('pg');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
@@ -73,16 +73,27 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
         const { rows: existentes } = await db.query(existentesQuery, [dataVerificacao, usuarioId]);
         if (existentes.length > 0) return;
 
-        // --- CORREÇÃO DO FUSO HORÁRIO APLICADA AQUI ---
-        // Em vez de 'new Date()', usamos uma string de data simples (YYYY-MM-DD)
+        // --- INÍCIO DA CORREÇÃO ---
         const primeiroDiaDoMesString = `${ano}-${mesFormatado}-01`;
-
-        const lancamentosFixosQuery = `SELECT * FROM lancamentos_fixos WHERE usuario_id = $1 AND data_inicio <= $2::date AND (data_fim IS NULL OR data_fim >= $2::date)`;
-        const { rows: lancamentosFixos } = await db.query(lancamentosFixosQuery, [usuarioId, primeiroDiaDoMesString]);
+        // Calcula o último dia do mês para a consulta SQL
+        const ultimoDiaDoMes = new Date(ano, mes, 0).getDate();
+        const ultimoDiaDoMesString = `${ano}-${mesFormatado}-${ultimoDiaDoMes}`;
+        
+        // A consulta SQL foi corrigida para verificar se o período de vigência do lançamento
+        // cruza com o mês atual.
+        const lancamentosFixosQuery = `
+            SELECT * FROM lancamentos_fixos 
+            WHERE usuario_id = $1 
+            AND data_inicio <= $2::date -- A vigência deve começar ANTES ou NO ÚLTIMO dia do mês
+            AND (data_fim IS NULL OR data_fim >= $3::date) -- E terminar DEPOIS ou NO PRIMEIRO dia do mês
+        `;
+        const { rows: lancamentosFixos } = await db.query(lancamentosFixosQuery, [usuarioId, ultimoDiaDoMesString, primeiroDiaDoMesString]);
+        // --- FIM DA CORREÇÃO ---
+        
         if (lancamentosFixos.length === 0) return;
 
         for (const fixo of lancamentosFixos) {
-            const ultimoDiaDoMes = new Date(ano, mes, 0).getDate();
+            // A lógica de inserção permanece a mesma, pois já usa ultimoDiaDoMes corretamente.
             const dia = Math.min(fixo.dia_do_mes, ultimoDiaDoMes);
             const dataLancamento = `${ano}-${mesFormatado}-${String(dia).padStart(2, '0')}`;
             const insertQuery = 'INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id) VALUES ($1, $2, $3, \'previsto\', $4, $5, TRUE, $6)';

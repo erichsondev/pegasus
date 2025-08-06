@@ -1,6 +1,6 @@
 /*
  * =================================================================
- * PEGASUS FINANCE 2.0
+ * PEGASUS FINANCE 2.0 - SERVIDOR CORRIGIDO
  * =================================================================
  */
 
@@ -120,7 +120,6 @@ async function calcularResumoParaMes(ano, mes, usuarioId, profundidade = 0) {
     let mesAnterior = mes - 1, anoAnterior = ano;
     if (mesAnterior === 0) { mesAnterior = 12; anoAnterior--; }
     
-    // Evita recursão infinita se estivermos muito no passado
     if (profundidade > 48) return { saldoFinalProjetado: 0 };
 
     const resumoAnterior = await calcularResumoParaMes(anoAnterior, mesAnterior, usuarioId, profundidade + 1);
@@ -251,9 +250,6 @@ rotasProtegidas.delete('/transacoes/:id', asyncHandler(async (req, res) => {
     res.status(204).send();
 }));
 
-// =================================================================
-// ======> INÍCIO DA ÚNICA ADIÇÃO AO CÓDIGO <======
-// =================================================================
 rotasProtegidas.put('/transacoes/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { descricao, valor, data, categoria_id, cartao_id } = req.body;
@@ -282,9 +278,6 @@ rotasProtegidas.put('/transacoes/:id', asyncHandler(async (req, res) => {
 
     res.status(200).json({ message: 'Transação atualizada com sucesso!' });
 }));
-// =================================================================
-// ======> FIM DA ÚNICA ADIÇÃO AO CÓDIGO <======
-// =================================================================
 
 rotasProtegidas.put('/transacoes/:id/efetivar', asyncHandler(async (req, res) => {
     await db.query('UPDATE transacoes SET status = \'efetivado\' WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
@@ -296,15 +289,12 @@ rotasProtegidas.put('/transacoes/:id/prever', asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'Transação revertida para previsto!' });
 }));
 
-// --- INÍCIO DA CORREÇÃO DOS GRÁFICOS ---
 rotasProtegidas.get('/grafico/evolucao-patrimonial', asyncHandler(async (req, res) => {
     const { inicio, fim } = req.query;
     const usuarioId = req.usuario.id;
-
-    // 1. Calcular o saldo inicial antes do período do gráfico
     const dataInicioObj = new Date(inicio + 'T00:00:00');
     let anoAnterior = dataInicioObj.getFullYear();
-    let mesAnterior = dataInicioObj.getMonth(); // getMonth() é 0-11, então mês anterior é só subtrair
+    let mesAnterior = dataInicioObj.getMonth();
     if (mesAnterior === 0) {
         mesAnterior = 12;
         anoAnterior--;
@@ -312,7 +302,6 @@ rotasProtegidas.get('/grafico/evolucao-patrimonial', asyncHandler(async (req, re
     const resumoAnterior = await calcularResumoParaMes(anoAnterior, mesAnterior, usuarioId);
     let saldoAcumulado = resumoAnterior.saldoFinalProjetado;
 
-    // 2. Obter os totais mensais de receitas e despesas para o período do gráfico
     const sql = `
         SELECT 
             TO_CHAR(data, 'YYYY-MM') AS mes,
@@ -325,17 +314,15 @@ rotasProtegidas.get('/grafico/evolucao-patrimonial', asyncHandler(async (req, re
     `;
     const { rows: totaisMensais } = await db.query(sql, [usuarioId, inicio, fim]);
 
-    // 3. Calcular o saldo acumulado para cada mês no período
     const dadosGrafico = totaisMensais.map(item => {
         saldoAcumulado += item.receitas - item.despesas;
         return {
             mes: item.mes,
-            receitas: item.receitas,
-            despesas: item.despesas,
+            receitas: parseFloat(item.receitas),
+            despesas: parseFloat(item.despesas),
             saldo_acumulado: saldoAcumulado
         };
     });
-
     res.json(dadosGrafico);
 }));
 
@@ -371,8 +358,6 @@ rotasProtegidas.get('/grafico/gastos-por-cartao', asyncHandler(async (req, res) 
     const { rows } = await db.query(sql, [inicio, fim, req.usuario.id]);
     res.json(rows);
 }));
-// --- FIM DA CORREÇÃO DOS GRÁFICOS ---
-
 
 rotasProtegidas.get('/lancamentos-fixos', asyncHandler(async (req, res) => {
     const sql = 'SELECT lf.*, c.nome as nome_categoria FROM lancamentos_fixos lf LEFT JOIN categorias c ON lf.categoria_id = c.id WHERE lf.usuario_id = $1 ORDER BY lf.tipo, lf.descricao';
@@ -380,15 +365,31 @@ rotasProtegidas.get('/lancamentos-fixos', asyncHandler(async (req, res) => {
     res.json(rows);
 }));
 
+
+// =================================================================
+// ======> INÍCIO DAS CORREÇÕES <======
+// =================================================================
+
 rotasProtegidas.post('/lancamentos-fixos', asyncHandler(async (req, res) => {
     const { descricao, valor, tipo, dia_do_mes, categoria_id, data_inicio, data_fim } = req.body;
     const sql = 'INSERT INTO lancamentos_fixos (descricao, valor, tipo, dia_do_mes, categoria_id, usuario_id, data_inicio, data_fim) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id';
     const { rows } = await db.query(sql, [descricao, valor, tipo, dia_do_mes, categoria_id || null, req.usuario.id, data_inicio, data_fim || null]);
     
-    await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND data >= NOW()::date AND usuario_id = $1", [req.usuario.id]);
+    // Lógica segura de recriação:
+    // 1. Apaga todas as transações previstas futuras para este usuário a partir da data de início do novo item.
+    await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND data >= $1 AND usuario_id = $2", [data_inicio, req.usuario.id]);
 
-    const hoje = new Date();
-    await gerarLancamentosPrevistos(hoje.getFullYear(), hoje.getMonth() + 1, req.usuario.id);
+    // 2. Recria os lançamentos para os próximos 12 meses para garantir consistência
+    const dataInicioObj = new Date(data_inicio + 'T00:00:00'); // Garante que a data seja tratada corretamente
+    for (let i = 0; i < 12; i++) {
+        let dataAlvo = new Date(dataInicioObj);
+        dataAlvo.setMonth(dataAlvo.getMonth() + i);
+        
+        let ano = dataAlvo.getFullYear();
+        let mes = dataAlvo.getMonth() + 1;
+        
+        await gerarLancamentosPrevistos(ano, mes, req.usuario.id);
+    }
     
     res.status(201).json({ id: rows[0].id });
 }));
@@ -396,13 +397,41 @@ rotasProtegidas.post('/lancamentos-fixos', asyncHandler(async (req, res) => {
 
 rotasProtegidas.delete('/lancamentos-fixos/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { rows } = await db.query('SELECT descricao FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, req.usuario.id]);
-    if (rows.length > 0) {
-        await db.query("DELETE FROM transacoes WHERE descricao = $1 AND gerado_automaticamente = TRUE AND status = 'previsto' AND data >= NOW()::date AND usuario_id = $2", [rows[0].descricao, req.usuario.id]);
+    const usuarioId = req.usuario.id;
+
+    // Primeiro, pegamos a data de início para saber a partir de quando recalcular
+    const { rows: lancamentoInfo } = await db.query('SELECT data_inicio FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
+    if (lancamentoInfo.length === 0) {
+        return res.status(404).send(); // Lançamento não encontrado
     }
-    await db.query('DELETE FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, req.usuario.id]);
+    const data_inicio = lancamentoInfo[0].data_inicio;
+
+    // Deleta o lançamento fixo da matriz
+    await db.query('DELETE FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
+    
+    // Lógica segura de recriação:
+    // 1. Apaga todas as transações previstas futuras a partir da data de início do item deletado.
+    await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND data >= $1 AND usuario_id = $2", [data_inicio, usuarioId]);
+
+    // 2. Recria os lançamentos para os próximos 12 meses
+    const dataInicioObj = new Date(data_inicio);
+     for (let i = 0; i < 12; i++) {
+        let dataAlvo = new Date(dataInicioObj);
+        dataAlvo.setMonth(dataAlvo.getMonth() + i);
+        
+        let ano = dataAlvo.getFullYear();
+        let mes = dataAlvo.getMonth() + 1;
+        
+        await gerarLancamentosPrevistos(ano, mes, usuarioId);
+    }
+
     res.status(204).send();
 }));
+
+// =================================================================
+// ======> FIM DAS CORREÇÕES <======
+// =================================================================
+
 
 rotasProtegidas.get('/categorias', asyncHandler(async (req, res) => {
     const { rows } = await db.query('SELECT * FROM categorias WHERE usuario_id = $1 ORDER BY nome', [req.usuario.id]);

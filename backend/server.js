@@ -1,7 +1,6 @@
 /*
  * =================================================================
  * PEGASUS FINANCE 2.0
- * SERVER-SIDE LOGIC (VERSÃO FINAL COM CORREÇÃO DE FUSO HORÁRIO E VIGÊNCIA)
  * =================================================================
  */
 
@@ -251,6 +250,41 @@ rotasProtegidas.delete('/transacoes/:id', asyncHandler(async (req, res) => {
     await db.query('DELETE FROM transacoes WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
     res.status(204).send();
 }));
+
+// =================================================================
+// ======> INÍCIO DA ÚNICA ADIÇÃO AO CÓDIGO <======
+// =================================================================
+rotasProtegidas.put('/transacoes/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { descricao, valor, data, categoria_id, cartao_id } = req.body;
+    const usuarioId = req.usuario.id;
+
+    const sql = `
+        UPDATE transacoes 
+        SET descricao = $1, valor = $2, data = $3, categoria_id = $4, cartao_id = $5
+        WHERE id = $6 AND usuario_id = $7
+        RETURNING id;
+    `;
+    
+    const { rowCount } = await db.query(sql, [
+        descricao, 
+        valor, 
+        data, 
+        categoria_id || null, 
+        cartao_id || null, 
+        id, 
+        usuarioId
+    ]);
+
+    if (rowCount === 0) {
+        return res.status(404).json({ message: 'Transação não encontrada ou não pertence ao usuário.' });
+    }
+
+    res.status(200).json({ message: 'Transação atualizada com sucesso!' });
+}));
+// =================================================================
+// ======> FIM DA ÚNICA ADIÇÃO AO CÓDIGO <======
+// =================================================================
 
 rotasProtegidas.put('/transacoes/:id/efetivar', asyncHandler(async (req, res) => {
     await db.query('UPDATE transacoes SET status = \'efetivado\' WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);

@@ -19,6 +19,7 @@
             --cor-aviso: #ffc107;
             --cor-perigo-hover: #c82333;
             --sombra-card: 0 4px 15px rgba(0, 0, 0, 0.1);
+            --cor-edicao: #6c757d; /* Cor para o botão de editar */
         }
         body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--cor-fundo); margin: 0; color: var(--cor-texto); }
         .header { background-color: var(--cor-primaria); color: var(--cor-branco); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -53,7 +54,12 @@
         form .form-group { margin-bottom: 15px; }
         form label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.9em; }
         form input, form select { width: 100%; padding: 10px; border: 1px solid #dddfe2; border-radius: 6px; font-size: 1rem; box-sizing: border-box; font-family: 'Poppins', sans-serif;}
-        form button { width: 100%; padding: 12px; border: none; background-color: var(--cor-sucesso); color: white; border-radius: 6px; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s; }
+        /* : Ajuste no botão do formulário */
+        .form-actions { display: flex; gap: 10px; }
+        .form-actions button { flex-grow: 1; padding: 12px; border: none; color: white; border-radius: 6px; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s; }
+        #btn-submit-form { background-color: var(--cor-sucesso); }
+        #btn-cancel-edit { background-color: var(--cor-edicao); display: none; } /* Oculto por padrão */
+
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { text-align: left; padding: 14px; border-bottom: 1px solid #eee; vertical-align: middle; }
         th { background-color: #f7f7ff; font-weight: 600; }
@@ -66,10 +72,9 @@
         .delete-btn { background-color: var(--cor-perigo); }
         .efetivar-btn { background-color: var(--cor-sucesso); }
         .reverter-btn { background-color: var(--cor-aviso); color: #333; }
+        .edit-btn { background-color: var(--cor-edicao); } /* */
         
-        @media (max-width: 1200px) {
-            .grid { grid-template-columns: 1fr; }
-        }
+        @media (max-width: 1200px) { .grid { grid-template-columns: 1fr; } }
         @media (max-width: 768px) {
             .header { flex-direction: column; gap: 15px; }
             main { padding: 20px; }
@@ -113,8 +118,11 @@
 
         <div class="grid">
             <div class="card" id="form-card">
-                <h2>Nova Transação</h2>
+                <h2 id="form-titulo">Nova Transação</h2> -->
                 <form id="form-transacao">
+                    : Campo oculto para guardar o ID da transação em edição -->
+                    <input type="hidden" id="transacao-id">
+
                     <div class="form-group"><label for="tipo">Tipo</label><select id="tipo" required><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
                     <div class="form-group"><label for="descricao">Descrição</label><input type="text" id="descricao" required></div>
                     <div class="form-group"><label for="valor">Valor (R$)</label><input type="number" step="0.01" id="valor" required></div>
@@ -122,7 +130,12 @@
                     <div class="form-group"><label for="categoria">Categoria</label><select id="categoria"><option value="">Nenhuma</option></select></div>
                     <div class="form-group" id="cartao-group"><label for="cartao">Cartão de Crédito</label><select id="cartao"><option value="">Nenhum</option></select></div>
                     <div class="form-group"><label for="status">Status</label><select id="status" required><option value="efetivado">Efetivado</option><option value="previsto">Previsto</option></select></div>
-                    <button type="submit">Adicionar Transação</button>
+                    
+                    : Container para os botões de ação do formulário -->
+                    <div class="form-actions">
+                        <button type="submit" id="btn-submit-form">Adicionar Transação</button>
+                        <button type="button" id="btn-cancel-edit">Cancelar Edição</button>
+                    </div>
                 </form>
             </div>
             <div class="card" id="list-card">
@@ -149,46 +162,36 @@
         const tituloPagina = document.getElementById('titulo-pagina');
         const formTransacao = document.getElementById('form-transacao');
         
-        const headers = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        };
+        // : Constantes para os novos elementos
+        const formTitulo = document.getElementById('form-titulo');
+        const transacaoIdInput = document.getElementById('transacao-id');
+        const btnSubmitForm = document.getElementById('btn-submit-form');
+        const btnCancelEdit = document.getElementById('btn-cancel-edit');
+        
+        const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
 
-        // --- LÓGICA DE DATAS (TOTALMENTE REFEITA) ---
+        // --- LÓGICA DE DATAS (inalterada) ---
         function popularSeletoresDeData() {
             const hoje = new Date();
             const anoAtual = hoje.getFullYear();
             const mesAtual = hoje.getMonth() + 1;
-            
-            // Popula o seletor de ano (5 anos para trás, 5 para frente)
             for (let i = anoAtual + 5; i >= anoAtual - 5; i--) {
                 const option = document.createElement('option');
-                option.value = i;
-                option.textContent = i;
-                seletorAno.appendChild(option);
+                option.value = i; option.textContent = i; seletorAno.appendChild(option);
             }
-            seletorAno.value = anoAtual; // Define o ano atual como padrão
-            
-            // Popula o seletor de mês
+            seletorAno.value = anoAtual;
             const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
             for (let i = 0; i < 12; i++) {
                 const option = document.createElement('option');
-                option.value = i + 1;
-                option.textContent = meses[i];
-                seletorMes.appendChild(option);
+                option.value = i + 1; option.textContent = meses[i]; seletorMes.appendChild(option);
             }
-            seletorMes.value = mesAtual; // Define o mês atual como padrão
-
-            // Define a data no formulário para hoje
+            seletorMes.value = mesAtual;
             document.getElementById('data').valueAsDate = hoje;
         }
 
-        // --- LÓGICA PRINCIPAL DE BUSCA DE DADOS (CORRIGIDA) ---
         async function buscarDados() {
             try {
-                // Primeiro, busca o resumo (e gera os lançamentos, se necessário)
                 await buscarResumo();
-                // Somente depois, busca a lista de transações
                 await buscarTransacoes();
             } catch (err) {
                 console.error("Erro ao carregar dados da página:", err);
@@ -196,7 +199,6 @@
             }
         }
         
-        // --- FUNÇÕES DE LÓGICA (MAIORIA INALTERADA, MAS CHAMADAS PELO buscarDados) ---
         async function buscarResumo() {
             const mes = seletorMes.value;
             const ano = seletorAno.value;
@@ -241,6 +243,14 @@
                 
                 const tdAcoes = document.createElement('td');
                 tdAcoes.className = 'actions-cell';
+
+                // : Adicionar o botão de editar
+                const editBtn = document.createElement('button');
+                editBtn.textContent = '✏️ Editar';
+                editBtn.className = 'edit-btn';
+                editBtn.onclick = () => prepararEdicao(t);
+                tdAcoes.appendChild(editBtn);
+
                 if (t.status === 'previsto') {
                     const efetivarBtn = document.createElement('button');
                     efetivarBtn.textContent = '✅ Efetivar';
@@ -263,6 +273,39 @@
                 tbody.appendChild(tr);
             });
         }
+        
+        // : Nova função para preparar o formulário para edição
+        function prepararEdicao(transacao) {
+            formTitulo.textContent = 'Editar Transação';
+            transacaoIdInput.value = transacao.id;
+            document.getElementById('tipo').value = transacao.tipo;
+            document.getElementById('descricao').value = transacao.descricao;
+            document.getElementById('valor').value = transacao.valor;
+            // Corrigir a data para o fuso horário local ao preencher o input
+            const dataLocal = new Date(transacao.data);
+            const dataAjustada = new Date(dataLocal.getTime() + dataLocal.getTimezoneOffset() * 60000);
+            document.getElementById('data').valueAsDate = dataAjustada;
+
+            document.getElementById('categoria').value = transacao.categoria_id || '';
+            document.getElementById('cartao').value = transacao.cartao_id || '';
+            document.getElementById('status').value = transacao.status;
+
+            btnSubmitForm.textContent = 'Salvar Alterações';
+            btnCancelEdit.style.display = 'inline-block'; // Mostra o botão de cancelar
+
+            // Rola a página para o formulário para facilitar a visualização
+            document.getElementById('form-card').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // : Nova função para resetar o formulário do modo de edição
+        function resetarModoFormulario() {
+            formTitulo.textContent = 'Nova Transação';
+            formTransacao.reset();
+            transacaoIdInput.value = '';
+            document.getElementById('data').valueAsDate = new Date(); // Data padrão
+            btnSubmitForm.textContent = 'Adicionar Transação';
+            btnCancelEdit.style.display = 'none';
+        }
 
         async function popularDropdowns() {
             const [categorias, cartoes] = await Promise.all([
@@ -274,28 +317,61 @@
             selectCategoria.innerHTML = '<option value="">Nenhuma</option>';
             categorias.forEach(cat => {
                 const option = document.createElement('option');
-                option.value = cat.id;
-                option.textContent = cat.nome;
-                selectCategoria.appendChild(option);
+                option.value = cat.id; option.textContent = cat.nome; selectCategoria.appendChild(option);
             });
             
             const selectCartao = document.getElementById('cartao');
             selectCartao.innerHTML = '<option value="">Nenhum</option>';
             cartoes.forEach(cart => {
                 const option = document.createElement('option');
-                option.value = cart.id;
-                option.textContent = cart.nome;
-                selectCartao.appendChild(option);
+                option.value = cart.id; option.textContent = cart.nome; selectCartao.appendChild(option);
             });
         }
         
+        // : Lógica do formulário agora decide entre Adicionar e Editar
         formTransacao.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const transacao = { tipo: document.getElementById('tipo').value, descricao: document.getElementById('descricao').value, valor: parseFloat(document.getElementById('valor').value), data: document.getElementById('data').value, categoria_id: document.getElementById('categoria').value || null, cartao_id: document.getElementById('cartao').value || null, status: document.getElementById('status').value };
-            await fetch(`${API_URL}/transacoes`, { method: 'POST', headers: headers, body: JSON.stringify(transacao) });
-            formTransacao.reset();
-            document.getElementById('data').valueAsDate = new Date();
-            buscarDados();
+            const id = transacaoIdInput.value;
+            
+            const transacao = { 
+                tipo: document.getElementById('tipo').value, 
+                descricao: document.getElementById('descricao').value, 
+                valor: parseFloat(document.getElementById('valor').value), 
+                data: document.getElementById('data').value, 
+                categoria_id: document.getElementById('categoria').value || null, 
+                cartao_id: document.getElementById('cartao').value || null, 
+                status: document.getElementById('status').value 
+            };
+
+            try {
+                let response;
+                if (id) {
+                    // MODO EDIÇÃO: Envia um PUT para a rota de atualização
+                    response = await fetch(`${API_URL}/transacoes/${id}`, { 
+                        method: 'PUT', 
+                        headers: headers, 
+                        body: JSON.stringify(transacao) 
+                    });
+                } else {
+                    // MODO ADIÇÃO: Envia um POST para a rota de criação
+                    response = await fetch(`${API_URL}/transacoes`, { 
+                        method: 'POST', 
+                        headers: headers, 
+                        body: JSON.stringify(transacao) 
+                    });
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Falha ao salvar a transação.');
+                }
+                
+            } catch (error) {
+                alert(`Erro: ${error.message}`);
+            } finally {
+                resetarModoFormulario();
+                buscarDados();
+            }
         });
 
         async function deletarTransacao(id) { if (confirm('Tem certeza?')) { await fetch(`${API_URL}/transacoes/${id}`, { method: 'DELETE', headers: headers }); buscarDados(); }}
@@ -314,15 +390,16 @@
                 window.location.href = './login.html';
             });
 
+            // : Adiciona evento ao botão de cancelar edição
+            btnCancelEdit.addEventListener('click', resetarModoFormulario);
+
             popularDropdowns();
             popularSeletoresDeData();
             buscarDados();
 
-            // Adiciona os gatilhos para recarregar os dados quando os seletores mudam
             seletorAno.addEventListener('change', buscarDados);
             seletorMes.addEventListener('change', buscarDados);
 
-            // Esconde o campo de cartão se a transação for uma receita
              document.getElementById('tipo').addEventListener('change', (e) => {
                 document.getElementById('cartao-group').style.display = e.target.value === 'despesa' ? 'block' : 'none';
             });

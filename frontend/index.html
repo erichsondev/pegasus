@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Carregando Pegasus Finance...</title>
+    <script>
+        // Esta é a primeira coisa que o navegador vai executar.
+        // Ele verifica se o "token" de login existe no armazenamento local.
+        const token = localStorage.getItem('token');
+
+        if (token) {
+            // Se o token existe, o usuário está logado.
+            // Redireciona para a página de menu.
+            window.location.href = './menu.html';
+        } else {
+            // Se não há token, o usuário não está logado.
+            // Redireciona para a página de apresentação (landing page).
+            window.location.href = './landing.html';
+        }
+    </script>
+    <style>
+        /* Apenas para dar um feedback visual enquanto redireciona */
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: sans-serif;
+            background-color: #f0f8ff;
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <h1>Carregando...</h1>
+</body>
+</html>

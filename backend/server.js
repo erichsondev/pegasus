@@ -1,6 +1,6 @@
 /*
  * =================================================================
- * PEGASUS FINANCE 2.0 - SERVIDOR COMPLETO E CORRIGIDO
+ * PEGASUS FINANCE 2.0 - SERVIDOR COM TODAS AS CORREÇÕES
  * =================================================================
  */
 
@@ -65,7 +65,7 @@ inicializarBancoDeDados();
 // --- 4. FUNÇÕES AUXILIARES (LÓGICA DE NEGÓCIO) ---
 async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
     try {
-        // CORREÇÃO: A trava de segurança que impedia a recriação foi REMOVIDA daqui.
+        // CORREÇÃO: A trava de segurança que impedia a recriação foi REMOVIDA.
         const mesFormatado = String(mes).padStart(2, '0');
         const primeiroDiaDoMesString = `${ano}-${mesFormatado}-01`;
         const ultimoDiaDoMes = new Date(ano, mes, 0).getDate();
@@ -209,20 +209,25 @@ async function limparEGerarFuturos(dataReferencia, usuarioId) {
 rotasProtegidas.get('/resumo', asyncHandler(async (req, res) => {
     const { mes, ano } = req.query;
     const usuarioId = req.usuario.id;
-    
-    // Limpa apenas as previsões do mês solicitado e gera novamente.
     const mesFormatado = `${ano}-${String(mes).padStart(2, '0')}`;
-    await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND TO_CHAR(data, 'YYYY-MM') = $1 AND usuario_id = $2", [mesFormatado, usuarioId]);
-    await gerarLancamentosPrevistos(parseInt(ano), parseInt(mes), usuarioId);
 
+    // CORREÇÃO: A rota agora só gera lançamentos se o mês estiver vazio, evitando apagar edições.
+    // Passo 1: Verifica se já existem lançamentos automáticos para o mês.
+    const existentesQuery = "SELECT 1 FROM transacoes WHERE gerado_automaticamente = TRUE AND TO_CHAR(data, 'YYYY-MM') = $1 AND usuario_id = $2 LIMIT 1";
+    const { rows: existentes } = await db.query(existentesQuery, [mesFormatado, usuarioId]);
+
+    // Passo 2: Se NÃO existir NENHUM, então gere os lançamentos para o mês.
+    if (existentes.length === 0) {
+        await gerarLancamentosPrevistos(parseInt(ano), parseInt(mes), usuarioId);
+    }
+    
+    // Passo 3: Agora, simplesmente calcule e retorne o resumo. A rota não altera mais dados indevidamente.
     const resumoCompleto = await calcularResumoParaMes(parseInt(ano), parseInt(mes), usuarioId);
     res.json(resumoCompleto);
 }));
 
 rotasProtegidas.get('/transacoes', asyncHandler(async (req, res) => {
     const { mes, ano } = req.query;
-    // A chamada para gerar lançamentos já está na rota /resumo, que é chamada antes no frontend.
-    // Não precisa chamar de novo aqui para evitar redundância.
     const sql = `SELECT t.*, c.nome as nome_categoria FROM transacoes t LEFT JOIN categorias c ON t.categoria_id = c.id WHERE TO_CHAR(t.data, 'YYYY-MM') = $1 AND t.usuario_id = $2 ORDER BY t.data DESC, t.id DESC`;
     const { rows } = await db.query(sql, [`${ano}-${String(mes).padStart(2, '0')}`, req.usuario.id]);
     res.json(rows);
@@ -242,24 +247,20 @@ rotasProtegidas.delete('/transacoes/:id', asyncHandler(async (req, res) => {
 
 rotasProtegidas.put('/transacoes/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { descricao, valor, data, categoria_id, cartao_id } = req.body;
+    const { descricao, valor, data, status, categoria_id, cartao_id } = req.body;
     const usuarioId = req.usuario.id;
-
     const sql = `
         UPDATE transacoes 
-        SET descricao = $1, valor = $2, data = $3, categoria_id = $4, cartao_id = $5
-        WHERE id = $6 AND usuario_id = $7
+        SET descricao = $1, valor = $2, data = $3, categoria_id = $4, cartao_id = $5, status = $6
+        WHERE id = $7 AND usuario_id = $8
         RETURNING id;
     `;
-    
     const { rowCount } = await db.query(sql, [
-        descricao, valor, data, categoria_id || null, cartao_id || null, id, usuarioId
+        descricao, valor, data, categoria_id || null, cartao_id || null, status, id, usuarioId
     ]);
-
     if (rowCount === 0) {
         return res.status(404).json({ message: 'Transação não encontrada ou não pertence ao usuário.' });
     }
-
     res.status(200).json({ message: 'Transação atualizada com sucesso!' });
 }));
 

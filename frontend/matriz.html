@@ -9,54 +9,98 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --cor-primaria: #007bff; --cor-primaria-hover: #0056b3; --cor-fundo: #f0f8ff;
-            --cor-texto: #333; --cor-branco: #ffffff; --cor-perigo: #dc3545;
-            --cor-perigo-hover: #c82333; --sombra-card: 0 4px 15px rgba(0, 0, 0, 0.1);
+            --cor-primaria: #007bff;
+            --cor-primaria-hover: #0056b3;
+            --cor-fundo: #f0f8ff;
+            --cor-texto: #333;
+            --cor-branco: #ffffff;
+            --cor-perigo: #dc3545;
+            --cor-perigo-hover: #c82333;
+            --sombra-card: 0 4px 15px rgba(0, 0, 0, 0.1);
         }
-        body { font-family: 'Poppins', sans-serif; background-color: var(--cor-fundo); margin: 0; color: var(--cor-texto); }
-        .header { background-color: var(--cor-primaria); color: var(--cor-branco); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex-wrap: wrap; }
+        body { 
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: var(--cor-fundo); 
+            margin: 0; 
+            color: var(--cor-texto); 
+        }
+        .header {
+            background-color: var(--cor-primaria);
+            color: var(--cor-branco);
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
         .header h1 { margin: 0; font-size: 2em; font-weight: 700; }
         .header-direita { display: flex; align-items: center; gap: 20px; }
         .header-usuario { text-align: right; }
         .header-usuario p { margin: 0 0 5px 0; font-size: 0.9em; font-weight: 600; }
-        #btn-sair { background: none; border: 1px solid var(--cor-branco); color: var(--cor-branco); padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif; font-size: 0.9em; transition: all 0.2s; }
+        #btn-sair { background: none; border: 1px solid var(--cor-branco); color: var(--cor-branco); padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif; font-size: 0.9em; transition: background-color 0.2s, color 0.2s; }
         #btn-sair:hover { background-color: var(--cor-branco); color: var(--cor-primaria); }
+
         main { padding: 40px; }
-        .grid-container { display: grid; grid-template-columns: 1fr; gap: 30px; max-width: 1200px; margin: auto; }
-        .card { background: var(--cor-branco); padding: 20px 30px; border-radius: 8px; box-shadow: var(--sombra-card); }
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 30px;
+            max-width: 1200px;
+            margin: auto;
+        }
+        .card {
+            background: var(--cor-branco);
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: var(--sombra-card);
+        }
         h2 { color: var(--cor-primaria); border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0; font-weight: 600; }
         form { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end; margin-bottom: 20px; }
         .form-group { flex: 1 1 150px; }
-        .form-group label { font-size: 0.9em; font-weight: 600; display: block; margin-bottom: 5px; }
+        .form-group.full-width { flex: 1 1 100%; }
+        .form-group label { font-size: 0.9em; font-weight: 600; display: block; margin-bottom: 5px;}
         input, select { width: 100%; padding: 10px; border: 1px solid #dddfe2; border-radius: 6px; font-size: 1rem; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
-        button[type="submit"] { padding: 10px 15px; border: none; background-color: var(--cor-primaria); color: white; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s; height: 42px; }
+        button { padding: 10px 15px; border: none; background-color: var(--cor-primaria); color: white; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s; height: 42px; }
         button:hover { background-color: var(--cor-primaria-hover); }
         ul { list-style-type: none; padding: 0; margin-top: 20px; }
-        #lista-lancamentos-fixos li { display: grid; grid-template-columns: 2fr 1fr 0.8fr 1.5fr 1fr auto; gap: 15px; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
-        #lista-categorias li, #lista-cartoes li { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
-        li span { word-break: break-word; }
-        .delete-btn { background-color: var(--cor-perigo); color: white; border-color: transparent; }
+        li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; font-size: 1rem; gap: 10px; }
+        li span { flex: 1 1 auto; margin-right: 10px; word-break: break-word; }
+        .delete-btn { background-color: var(--cor-perigo); flex-shrink: 0; }
         .delete-btn:hover { background-color: var(--cor-perigo-hover); }
-        .btn-voltar { background: #6c757d; color: white; text-decoration: none; padding: 10px 15px; border-radius: 6px; font-weight: 600; }
+        .btn-voltar { background: #6c757d; color: white; text-decoration: none; padding: 10px 15px; border-radius: 6px; font-weight: 600; transition: background-color 0.2s; }
+        .btn-voltar:hover { background: #5a6268; }
+
         .checkbox-group { display: flex; align-items: center; gap: 10px; }
         .checkbox-group input { width: auto; }
         .checkbox-group label { margin-bottom: 0; }
-        @media (max-width: 900px) { #lista-lancamentos-fixos li { grid-template-columns: 1fr 1fr; } #lista-lancamentos-fixos li button { grid-column: 1 / -1; margin-top: 10px; } }
-        @media (max-width: 768px) { .header { flex-direction: column; gap: 15px; } main { padding: 20px; } #lista-lancamentos-fixos li { grid-template-columns: 1fr; gap: 5px; text-align: center; } }
+        
+        @media (max-width: 768px) {
+            .header { flex-direction: column; gap: 15px; }
+            main { padding: 20px; }
+            form { gap: 15px; }
+            li { flex-direction: column; align-items: flex-start; }
+            li span { margin-right: 0; margin-bottom: 5px; }
+            li .delete-btn { width: 100%; text-align: center; }
+        }
+
     </style>
 </head>
 <body>
     <header class="header">
         <h1>⚙️ Configurações (Matriz)</h1>
         <div class="header-direita">
-            <div class="header-usuario"><p id="saudacao-usuario">Olá!</p><button id="btn-sair">Sair</button></div>
+            <div class="header-usuario">
+                <p id="saudacao-usuario">Olá!</p>
+                <button id="btn-sair">Sair</button>
+            </div>
             <a href="./menu.html" class="btn-voltar">❮ Menu</a>
         </div>
     </header>
+
     <main>
         <div class="grid-container">
-            <div class="card">
-                <h2>Lançamentos Fixos</h2>
+            <div class="card" id="card-lancamentos-fixos">
+                <h2>Lançamentos Fixos e Receitas</h2>
                 <form id="form-lancamento-fixo">
                     <div class="form-group" style="flex-grow: 2;"><label>Descrição</label><input type="text" id="lf-descricao" required></div>
                     <div class="form-group"><label>Valor</label><input type="number" step="0.01" id="lf-valor" required></div>
@@ -69,7 +113,8 @@
                 </form>
                 <ul id="lista-lancamentos-fixos"></ul>
             </div>
-            <div class="card">
+
+            <div class="card" id="card-categorias-variaveis">
                 <h2>Cadastro de Categorias</h2>
                 <form id="form-categoria">
                     <div class="form-group" style="flex-grow: 2;"><label>Nome da Categoria</label><input type="text" id="input-nome-categoria" required></div>
@@ -81,7 +126,8 @@
                 </form>
                 <ul id="lista-categorias"></ul>
             </div>
-            <div class="card">
+
+            <div class="card" id="card-cartoes">
                 <h2>Cartões de Crédito</h2>
                 <form id="form-cartao">
                     <div class="form-group" style="flex-grow: 2;"><label>Nome do Cartão</label><input type="text" id="input-nome-cartao" required></div>
@@ -91,189 +137,206 @@
             </div>
         </div>
     </main>
+
     <script>
         const token = localStorage.getItem('token');
-        if (!token) window.location.href = './login.html';
+        if (!token) {
+            window.location.href = './login.html';
+        }
 
         const API_URL = 'https://pegasus-weld.onrender.com/api'; 
-        const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
-
-        const handleApiError = (error, action) => {
-            console.error(`Erro ao ${action}:`, error);
-            alert(`Não foi possível ${action}. Verifique o console para mais detalhes.`);
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
         };
 
         // --- LÓGICA DE LANÇAMENTOS FIXOS ---
         const formLancamentoFixo = document.getElementById('form-lancamento-fixo');
         const listaLancamentosFixos = document.getElementById('lista-lancamentos-fixos');
-        
-        const renderizarItemLancamentoFixo = (lf) => {
-            const item = document.createElement('li');
-            item.id = `lf-${lf.id}`;
-            const valorFormatado = parseFloat(lf.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-            const dataFimFormatada = lf.data_fim ? new Date(lf.data_fim).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : 'Sem Fim';
-            item.innerHTML = `<span>${lf.descricao} (${lf.tipo})</span><span>${valorFormatado}</span><span>Dia: ${lf.dia_do_mes}</span><span>Vigência até: ${dataFimFormatada}</span><span>Cat: ${lf.nome_categoria || 'N/A'}</span>`;
-            const deleteBtn = document.createElement('button');
-            deleteBtn.textContent = 'X';
-            deleteBtn.className = 'delete-btn';
-            deleteBtn.onclick = () => deletarLancamentoFixo(lf.id);
-            item.appendChild(deleteBtn);
-            listaLancamentosFixos.appendChild(item);
-        };
-
-        async function buscarLancamentosFixos() {
-            try {
-                const response = await fetch(`${API_URL}/lancamentos-fixos`, { headers });
-                if (!response.ok) throw new Error('Falha ao buscar lançamentos.');
-                const lancamentos = await response.json();
-                listaLancamentosFixos.innerHTML = '';
-                lancamentos.forEach(renderizarItemLancamentoFixo);
-            } catch (error) { handleApiError(error, 'buscar lançamentos fixos'); }
-        }
 
         async function adicionarLancamentoFixo(e) {
             e.preventDefault();
             const lancamento = {
-                descricao: document.getElementById('lf-descricao').value, valor: parseFloat(document.getElementById('lf-valor').value),
-                tipo: document.getElementById('lf-tipo').value, dia_do_mes: parseInt(document.getElementById('lf-dia').value),
-                categoria_id: document.getElementById('lf-categoria').value || null, data_inicio: document.getElementById('lf-inicio-vigencia').value,
+                descricao: document.getElementById('lf-descricao').value,
+                valor: parseFloat(document.getElementById('lf-valor').value),
+                tipo: document.getElementById('lf-tipo').value,
+                dia_do_mes: parseInt(document.getElementById('lf-dia').value),
+                categoria_id: document.getElementById('lf-categoria').value || null,
+                data_inicio: document.getElementById('lf-inicio-vigencia').value,
                 data_fim: document.getElementById('lf-fim-vigencia').value || null,
             };
-            try {
-                const response = await fetch(`${API_URL}/lancamentos-fixos`, { method: 'POST', headers, body: JSON.stringify(lancamento) });
-                if (!response.ok) throw new Error('Falha ao adicionar lançamento.');
-                formLancamentoFixo.reset();
-                document.getElementById('lf-inicio-vigencia').value = new Date().toISOString().split('T')[0];
-                await buscarLancamentosFixos();
-            } catch (error) { handleApiError(error, 'adicionar lançamento fixo'); }
+            
+            await fetch(`${API_URL}/lancamentos-fixos`, { method: 'POST', headers: headers, body: JSON.stringify(lancamento) });
+            formLancamentoFixo.reset();
+            buscarLancamentosFixos();
         }
 
+        async function buscarLancamentosFixos() {
+            const lancamentos = await fetch(`${API_URL}/lancamentos-fixos`, { headers }).then(res => res.json());
+            listaLancamentosFixos.innerHTML = '';
+            lancamentos.forEach(lf => {
+                const item = document.createElement('li');
+                const dataFimFormatada = lf.data_fim ? new Date(lf.data_fim).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : 'Sem Fim';
+                
+                item.innerHTML = `
+                    <span>${lf.descricao} (${lf.tipo})</span>
+                    <span>R$ ${parseFloat(lf.valor).toFixed(2)}</span>
+                    <span>Dia ${lf.dia_do_mes}</span>
+                    <span>Vigência até: ${dataFimFormatada}</span>
+                    <span>Cat: ${lf.nome_categoria || 'N/A'}</span>
+                `;
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'X';
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.onclick = () => deletarLancamentoFixo(lf.id);
+                item.appendChild(deleteBtn);
+                listaLancamentosFixos.appendChild(item);
+            });
+        }
         async function deletarLancamentoFixo(id) {
-            try {
-                const response = await fetch(`${API_URL}/lancamentos-fixos/${id}`, { method: 'DELETE', headers });
-                if (!response.ok) throw new Error('Falha ao deletar lançamento.');
-                document.getElementById(`lf-${id}`)?.remove();
-            } catch (error) { handleApiError(error, 'deletar lançamento fixo'); }
+            await fetch(`${API_URL}/lancamentos-fixos/${id}`, { method: 'DELETE', headers: headers });
+            buscarLancamentosFixos();
         }
+        formLancamentoFixo.addEventListener('submit', adicionarLancamentoFixo);
 
-        // --- LÓGICA DE CATEGORIAS ---
+        // --- LÓGICA DE CATEGORIAS (COM CORREÇÃO) ---
         const formCategoria = document.getElementById('form-categoria');
         const inputNomeCategoria = document.getElementById('input-nome-categoria');
         const listaCategorias = document.getElementById('lista-categorias');
         const selectCategoriaLF = document.getElementById('lf-categoria');
 
-        const renderizarItemCategoria = (categoria) => {
-            const item = document.createElement('li');
-            item.id = `categoria-${categoria.id}`;
-            const badgeAnalitico = categoria.analitico ? '✔️ Gráfico' : '✖️ Gráfico';
-            item.innerHTML = `<span>${categoria.nome}</span> <span>${badgeAnalitico}</span>`;
-            const deleteBtn = document.createElement('button');
-            deleteBtn.textContent = 'Deletar';
-            deleteBtn.className = 'delete-btn';
-            deleteBtn.onclick = () => deletarCategoria(categoria.id);
-            item.appendChild(deleteBtn);
-            listaCategorias.appendChild(item);
-        };
-
-        async function buscarCategorias() {
-            try {
-                const response = await fetch(`${API_URL}/categorias`, { headers });
-                if (!response.ok) throw new Error('Falha ao buscar categorias.');
-                const categorias = await response.json();
-                listaCategorias.innerHTML = '';
-                selectCategoriaLF.innerHTML = '<option value="">Nenhuma</option>';
-                categorias.forEach(cat => {
-                    renderizarItemCategoria(cat);
-                    const option = document.createElement('option');
-                    option.value = cat.id;
-                    option.textContent = cat.nome;
-                    selectCategoriaLF.appendChild(option);
-                });
-            } catch (error) { handleApiError(error, 'buscar categorias'); }
-        }
-
+        // **FUNÇÃO CORRIGIDA**
         async function adicionarCategoria(event) {
             event.preventDefault();
             const nome = inputNomeCategoria.value;
-            if (!nome) return;
             const analitico = document.getElementById('input-categoria-analitica').checked;
+
+            if (!nome) return;
+
             try {
-                const response = await fetch(`${API_URL}/categorias`, { method: 'POST', headers, body: JSON.stringify({ nome, analitico }) });
-                if (!response.ok) throw new Error('Falha ao salvar categoria.');
-                const novaCategoria = await response.json();
-                renderizarItemCategoria(novaCategoria);
+                const response = await fetch(`${API_URL}/categorias`, { 
+                    method: 'POST', 
+                    headers: headers, 
+                    body: JSON.stringify({ nome, analitico }) 
+                });
+
+                if (!response.ok) throw new Error('Falha ao salvar a categoria.');
+
+                const novaCategoria = await response.json(); // Pega a categoria criada de volta do servidor
+
+                // Adiciona o novo item na lista da tela, sem precisar recarregar tudo
+                renderizarItemCategoria(novaCategoria); 
+                
+                // Adiciona a nova opção no dropdown de Lançamentos Fixos
                 const option = document.createElement('option');
                 option.value = novaCategoria.id;
                 option.textContent = novaCategoria.nome;
                 selectCategoriaLF.appendChild(option);
+
+                // Limpa o formulário
                 inputNomeCategoria.value = '';
                 document.getElementById('input-categoria-analitica').checked = true;
-            } catch (error) { handleApiError(error, 'adicionar categoria'); }
+
+            } catch (error) {
+                console.error("Erro ao adicionar categoria:", error);
+                alert("Não foi possível adicionar a categoria.");
+            }
+        }
+        
+        // **NOVA FUNÇÃO** para renderizar um único item na lista
+        function renderizarItemCategoria(categoria) {
+            const item = document.createElement('li');
+            item.id = `categoria-${categoria.id}`; // Adiciona um ID para facilitar a remoção
+            const badgeAnalitico = categoria.analitico ? '✔️ Gráfico' : '✖️ Gráfico';
+            item.innerHTML = `<span>${categoria.nome}</span> <span>${badgeAnalitico}</span>`;
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = 'Deletar';
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.onclick = () => deletarCategoria(categoria.id);
+            
+            item.appendChild(deleteBtn);
+            listaCategorias.appendChild(item);
         }
 
-        async function deletarCategoria(id) {
-            try {
-                if(!confirm('Tem certeza que deseja deletar esta categoria?')) return;
-                const response = await fetch(`${API_URL}/categorias/${id}`, { method: 'DELETE', headers });
-                if (!response.ok) throw new Error('Falha ao deletar categoria.');
-                document.getElementById(`categoria-${id}`)?.remove();
-                for (let i = 0; i < selectCategoriaLF.options.length; i++) {
-                    if (selectCategoriaLF.options[i].value == id) {
-                        selectCategoriaLF.remove(i);
-                        break;
-                    }
-                }
-            } catch (error) { handleApiError(error, 'deletar categoria'); }
+        async function buscarCategorias() {
+            const response = await fetch(`${API_URL}/categorias`, { headers });
+            const categorias = await response.json();
+
+            listaCategorias.innerHTML = '';
+            categorias.forEach(renderizarItemCategoria); // Reutiliza a função de renderização
+
+            selectCategoriaLF.innerHTML = '<option value="">Nenhuma</option>';
+            categorias.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.id;
+                option.textContent = cat.nome;
+                selectCategoriaLF.appendChild(option);
+            });
         }
+
+        // **FUNÇÃO CORRIGIDA** para remover o item da tela
+        async function deletarCategoria(id) {
+            await fetch(`${API_URL}/categorias/${id}`, { method: 'DELETE', headers: headers });
+            
+            // Remove o item da lista na tela
+            const itemParaRemover = document.getElementById(`categoria-${id}`);
+            if (itemParaRemover) itemParaRemover.remove();
+
+            // Remove o item do dropdown
+            for (let i = 0; i < selectCategoriaLF.options.length; i++) {
+                if (selectCategoriaLF.options[i].value == id) {
+                    selectCategoriaLF.remove(i);
+                    break;
+                }
+            }
+        }
+        formCategoria.addEventListener('submit', adicionarCategoria);
 
         // --- LÓGICA DE CARTÕES ---
         const formCartao = document.getElementById('form-cartao');
         const inputNomeCartao = document.getElementById('input-nome-cartao');
         const listaCartoes = document.getElementById('lista-cartoes');
-
-        const renderizarItemCartao = (cartao) => {
-            const item = document.createElement('li');
-            item.id = `cartao-${cartao.id}`;
-            item.innerHTML = `<span>${cartao.nome}</span>`;
-            const deleteBtn = document.createElement('button');
-            deleteBtn.textContent = 'Deletar';
-            deleteBtn.className = 'delete-btn';
-            deleteBtn.onclick = () => deletarCartao(cartao.id);
-            item.appendChild(deleteBtn);
+        async function buscarCartoes() { 
+            const cartoes = await fetch(`${API_URL}/cartoes`, { headers }).then(res => res.json());
+            listaCartoes.innerHTML = ''; 
+            cartoes.forEach(cartao => { 
+                const item = document.createElement('li'); 
+                item.id = `cartao-${cartao.id}`;
+                item.innerHTML = `<span>${cartao.nome}</span>`; 
+                const deleteBtn = document.createElement('button'); 
+                deleteBtn.textContent = 'Deletar'; 
+                deleteBtn.className = 'delete-btn'; 
+                deleteBtn.onclick = () => deletarCartao(cartao.id); 
+                item.appendChild(deleteBtn); 
+                listaCartoes.appendChild(item); 
+            }); 
+        }
+        async function adicionarCartao(event) { 
+            event.preventDefault(); 
+            const nome = inputNomeCartao.value; 
+            if (!nome) return; 
+            const response = await fetch(`${API_URL}/cartoes`, { method: 'POST', headers: headers, body: JSON.stringify({ nome }) }); 
+            const novoCartao = await response.json();
+            
+            const item = document.createElement('li'); 
+            item.id = `cartao-${novoCartao.id}`;
+            item.innerHTML = `<span>${novoCartao.nome}</span>`; 
+            const deleteBtn = document.createElement('button'); 
+            deleteBtn.textContent = 'Deletar'; 
+            deleteBtn.className = 'delete-btn'; 
+            deleteBtn.onclick = () => deletarCartao(novoCartao.id); 
+            item.appendChild(deleteBtn); 
             listaCartoes.appendChild(item);
-        };
 
-        async function buscarCartoes() {
-            try {
-                const response = await fetch(`${API_URL}/cartoes`, { headers });
-                if (!response.ok) throw new Error('Falha ao buscar cartões.');
-                const cartoes = await response.json();
-                listaCartoes.innerHTML = '';
-                cartoes.forEach(renderizarItemCartao);
-            } catch (error) { handleApiError(error, 'buscar cartões'); }
+            inputNomeCartao.value = ''; 
         }
-
-        async function adicionarCartao(event) {
-            event.preventDefault();
-            const nome = inputNomeCartao.value;
-            if (!nome) return;
-            try {
-                const response = await fetch(`${API_URL}/cartoes`, { method: 'POST', headers, body: JSON.stringify({ nome }) });
-                if (!response.ok) throw new Error('Falha ao adicionar cartão.');
-                const novoCartao = await response.json();
-                renderizarItemCartao(novoCartao);
-                inputNomeCartao.value = '';
-            } catch (error) { handleApiError(error, 'adicionar cartão'); }
+        async function deletarCartao(id) { 
+            await fetch(`${API_URL}/cartoes/${id}`, { method: 'DELETE', headers: headers }); 
+            const itemParaRemover = document.getElementById(`cartao-${id}`);
+            if(itemParaRemover) itemParaRemover.remove();
         }
-
-        async function deletarCartao(id) {
-            try {
-                if(!confirm('Tem certeza que deseja deletar este cartão?')) return;
-                const response = await fetch(`${API_URL}/cartoes/${id}`, { method: 'DELETE', headers });
-                if (!response.ok) throw new Error('Falha ao deletar cartão.');
-                document.getElementById(`cartao-${id}`)?.remove();
-            } catch (error) { handleApiError(error, 'deletar cartão'); }
-        }
+        formCartao.addEventListener('submit', adicionarCartao);
 
         // --- INICIALIZAÇÃO ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -287,11 +350,8 @@
                 window.location.href = './login.html';
             });
             
-            document.getElementById('lf-inicio-vigencia').value = new Date().toISOString().split('T')[0];
-            
-            formLancamentoFixo.addEventListener('submit', adicionarLancamentoFixo);
-            formCategoria.addEventListener('submit', adicionarCategoria);
-            formCartao.addEventListener('submit', adicionarCartao);
+            const hoje = new Date().toISOString().split('T')[0];
+            document.getElementById('lf-inicio-vigencia').value = hoje;
 
             buscarLancamentosFixos();
             buscarCategorias();

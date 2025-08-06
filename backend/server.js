@@ -65,7 +65,6 @@ inicializarBancoDeDados();
 // --- 4. FUNÇÕES AUXILIARES (LÓGICA DE NEGÓCIO) ---
 async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
     try {
-        // CORREÇÃO: A trava de segurança que impedia a recriação foi REMOVIDA.
         const mesFormatado = String(mes).padStart(2, '0');
         const primeiroDiaDoMesString = `${ano}-${mesFormatado}-01`;
         const ultimoDiaDoMes = new Date(ano, mes, 0).getDate();
@@ -81,11 +80,28 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
         
         if (lancamentosFixos.length === 0) return;
 
+        // Para cada item fixo da sua matriz...
         for (const fixo of lancamentosFixos) {
-            const dia = Math.min(fixo.dia_do_mes, ultimoDiaDoMes);
-            const dataLancamento = `${ano}-${mesFormatado}-${String(dia).padStart(2, '0')}`;
-            const insertQuery = 'INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id) VALUES ($1, $2, $3, \'previsto\', $4, $5, TRUE, $6)';
-            await db.query(insertQuery, [fixo.descricao, fixo.valor, dataLancamento, fixo.tipo, fixo.categoria_id, usuarioId]);
+            
+            // ---> INÍCIO DA NOVA LÓGICA <---
+            // Antes de inserir, verifica se já existe uma transação com essa descrição neste mês para este usuário.
+            const existeTransacaoQuery = `
+                SELECT 1 FROM transacoes 
+                WHERE descricao = $1 
+                AND usuario_id = $2 
+                AND TO_CHAR(data, 'YYYY-MM') = $3
+                LIMIT 1;
+            `;
+            const { rows: transacaoExistente } = await db.query(existeTransacaoQuery, [fixo.descricao, usuarioId, `${ano}-${mesFormatado}`]);
+
+            // Se a transação NÃO existir, então pode criar.
+            if (transacaoExistente.length === 0) {
+                const dia = Math.min(fixo.dia_do_mes, ultimoDiaDoMes);
+                const dataLancamento = `${ano}-${mesFormatado}-${String(dia).padStart(2, '0')}`;
+                const insertQuery = 'INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id) VALUES ($1, $2, $3, \'previsto\', $4, $5, TRUE, $6)';
+                await db.query(insertQuery, [fixo.descricao, fixo.valor, dataLancamento, fixo.tipo, fixo.categoria_id, usuarioId]);
+            }
+            // ---> FIM DA NOVA LÓGICA <---
         }
     } catch (error) {
         console.error(`Erro ao gerar lançamentos previstos para ${ano}-${mes} para o usuário ${usuarioId}:`, error);

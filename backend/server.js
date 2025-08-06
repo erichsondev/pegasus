@@ -1,7 +1,7 @@
 /*
  * =================================================================
  * PEGASUS FINANCE 2.0
- * SERVER-SIDE LOGIC (VERSÃO FINAL CORRIGIDA E ESTABILIZADA)
+ * SERVER-SIDE LOGIC (VERSÃO FINAL ESTABILIZADA)
  * =================================================================
  */
 
@@ -60,13 +60,10 @@ const inicializarBancoDeDados = async () => {
         console.error('Erro ao sincronizar tabelas:', err);
     }
 };
-
 inicializarBancoDeDados();
 
 
 // --- 4. FUNÇÕES AUXILIARES (LÓGICA DE NEGÓCIO) ---
-
-// --- ALTERAÇÃO PEGASUS 2.0: Função agora com tratamento de erro interno ---
 async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
     try {
         const mesFormatado = String(mes).padStart(2, '0');
@@ -77,9 +74,7 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
         if (existentes.length > 0) return;
 
         const primeiroDiaDoMes = new Date(ano, mes - 1, 1);
-        const lancamentosFixosQuery = `
-            SELECT * FROM lancamentos_fixos 
-            WHERE usuario_id = $1 AND data_inicio <= $2::date AND (data_fim IS NULL OR data_fim >= $2::date)`;
+        const lancamentosFixosQuery = `SELECT * FROM lancamentos_fixos WHERE usuario_id = $1 AND data_inicio <= $2::date AND (data_fim IS NULL OR data_fim >= $2::date)`;
         const { rows: lancamentosFixos } = await db.query(lancamentosFixosQuery, [usuarioId, primeiroDiaDoMes]);
         if (lancamentosFixos.length === 0) return;
 
@@ -87,13 +82,11 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
             const ultimoDiaDoMes = new Date(ano, mes, 0).getDate();
             const dia = Math.min(fixo.dia_do_mes, ultimoDiaDoMes);
             const dataLancamento = `${ano}-${mesFormatado}-${String(dia).padStart(2, '0')}`;
-            
             const insertQuery = 'INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id) VALUES ($1, $2, $3, \'previsto\', $4, $5, TRUE, $6)';
             await db.query(insertQuery, [fixo.descricao, fixo.valor, dataLancamento, fixo.tipo, fixo.categoria_id, usuarioId]);
         }
     } catch (error) {
         console.error("Erro ao gerar lançamentos previstos:", error);
-        // A função não irá travar o servidor, apenas registrará o erro.
     }
 }
 
@@ -181,7 +174,7 @@ app.post('/api/usuarios/recuperar-senha', asyncHandler(async (req, res) => {
     if (usuario) {
         const resetToken = crypto.randomBytes(32).toString('hex');
         const tokenHash = await bcrypt.hash(resetToken, 10);
-        const expires_at = new Date(Date.now() + 3600000);
+        const expires_at = new Date(Date.now() + 3600000); // 1 hora
 
         await db.query('DELETE FROM password_reset_tokens WHERE usuario_id = $1', [usuario.id]);
         await db.query('INSERT INTO password_reset_tokens (usuario_id, token, expires_at) VALUES ($1, $2, $3)', [usuario.id, tokenHash, expires_at]);
@@ -192,7 +185,21 @@ app.post('/api/usuarios/recuperar-senha', asyncHandler(async (req, res) => {
             from: `"Pegasus Finance" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: 'Recuperação de Senha - Pegasus Finance',
-            html: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;"><h2 style="color: #007bff;">Olá, ${usuario.nome}!</h2><p>Recebemos uma solicitação para redefinir sua senha no Pegasus Finance.</p><p>Se foi você, clique no botão abaixo para criar uma nova senha. Este link é válido por 1 hora.</p><p style="margin: 30px 0; text-align: center;"><a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Redefinir Minha Senha</a></p><p>Se você não solicitou isso, pode ignorar este e-mail com segurança. Nenhuma alteração será feita na sua conta.</p><hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;"><p style="font-size: 0.9em; color: #777;">Atenciosamente,<br><b>Equipe Pegasus Finance</b></p></div>`
+            html: `
+                <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;">
+                    <h2 style="color: #007bff;">Olá, ${usuario.nome}!</h2>
+                    <p>Recebemos uma solicitação para redefinir sua senha no Pegasus Finance.</p>
+                    <p>Se foi você, clique no botão abaixo para criar uma nova senha. Este link é válido por 1 hora.</p>
+                    <p style="margin: 30px 0; text-align: center;">
+                        <a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                            Redefinir Minha Senha
+                        </a>
+                    </p>
+                    <p>Se você não solicitou isso, pode ignorar este e-mail com segurança. Nenhuma alteração será feita na sua conta.</p>
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                    <p style="font-size: 0.9em; color: #777;">Atenciosamente,<br><b>Equipe Pegasus Finance</b></p>
+                </div>
+            `
         };
         await transporter.sendMail(mailOptions);
         console.log(`E-mail de recuperação enviado para ${email}`);

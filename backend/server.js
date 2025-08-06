@@ -1,7 +1,7 @@
 /*
  * =================================================================
  * PEGASUS FINANCE 2.0
- * SERVER-SIDE LOGIC (VERSÃO FINAL ESTABILIZADA)
+ * SERVER-SIDE LOGIC (VERSÃO FINAL COM CORREÇÃO DE FUSO HORÁRIO)
  * =================================================================
  */
 
@@ -68,13 +68,17 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
     try {
         const mesFormatado = String(mes).padStart(2, '0');
         const dataVerificacao = `${ano}-${mesFormatado}`;
+        
         const existentesQuery = "SELECT 1 FROM transacoes WHERE TO_CHAR(data, 'YYYY-MM') = $1 AND gerado_automaticamente = TRUE AND usuario_id = $2 LIMIT 1";
         const { rows: existentes } = await db.query(existentesQuery, [dataVerificacao, usuarioId]);
         if (existentes.length > 0) return;
 
-        const primeiroDiaDoMes = new Date(ano, mes - 1, 1);
+        // --- CORREÇÃO DO FUSO HORÁRIO APLICADA AQUI ---
+        // Em vez de 'new Date()', usamos uma string de data simples (YYYY-MM-DD)
+        const primeiroDiaDoMesString = `${ano}-${mesFormatado}-01`;
+
         const lancamentosFixosQuery = `SELECT * FROM lancamentos_fixos WHERE usuario_id = $1 AND data_inicio <= $2::date AND (data_fim IS NULL OR data_fim >= $2::date)`;
-        const { rows: lancamentosFixos } = await db.query(lancamentosFixosQuery, [usuarioId, primeiroDiaDoMes]);
+        const { rows: lancamentosFixos } = await db.query(lancamentosFixosQuery, [usuarioId, primeiroDiaDoMesString]);
         if (lancamentosFixos.length === 0) return;
 
         for (const fixo of lancamentosFixos) {
@@ -140,9 +144,9 @@ const asyncHandler = fn => (req, res, next) => {
 };
 
 
-// --- 6. ROTAS DA API (SEÇÃO CORRIGIDA E REORGANIZADA) ---
+// --- 6. ROTAS DA API (ORGANIZADAS) ---
 
-// 6.1 Roteador para Rotas Públicas (não precisam de token)
+// 6.1 Roteador para Rotas Públicas
 const rotasPublicas = express.Router();
 
 rotasPublicas.post('/usuarios/cadastro', asyncHandler(async (req, res) => {
@@ -209,8 +213,7 @@ rotasPublicas.post('/usuarios/resetar-senha', asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'Senha redefinida com sucesso!' });
 }));
 
-
-// 6.2 Roteador para Rotas Protegidas (precisam de token)
+// 6.2 Roteador para Rotas Protegidas
 const rotasProtegidas = express.Router();
 rotasProtegidas.use(autenticarToken);
 

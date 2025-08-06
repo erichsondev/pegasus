@@ -8,7 +8,7 @@
 // --- 1. IMPORTAÇÕES E CONFIGURAÇÃO INICIAL ---
 const express = require('express');
 const cors = require('cors');
-const bcrypt = require('bcryptjs'); // Usando bcryptjs para compatibilidade com o Render
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const crypto = require('crypto');
@@ -68,7 +68,6 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
     try {
         const mesFormatado = String(mes).padStart(2, '0');
         const dataVerificacao = `${ano}-${mesFormatado}`;
-        
         const existentesQuery = "SELECT 1 FROM transacoes WHERE TO_CHAR(data, 'YYYY-MM') = $1 AND gerado_automaticamente = TRUE AND usuario_id = $2 LIMIT 1";
         const { rows: existentes } = await db.query(existentesQuery, [dataVerificacao, usuarioId]);
         if (existentes.length > 0) return;
@@ -141,10 +140,12 @@ const asyncHandler = fn => (req, res, next) => {
 };
 
 
-// --- 6. ROTAS DA API ---
+// --- 6. ROTAS DA API (SEÇÃO CORRIGIDA E REORGANIZADA) ---
 
-// Módulo de Autenticação e Usuários
-app.post('/api/usuarios/cadastro', asyncHandler(async (req, res) => {
+// 6.1 Roteador para Rotas Públicas (não precisam de token)
+const rotasPublicas = express.Router();
+
+rotasPublicas.post('/usuarios/cadastro', asyncHandler(async (req, res) => {
     const { nome, email, senha } = req.body;
     if (!nome || !email || !senha) return res.status(400).json({ message: 'Todos os campos são obrigatórios.' });
     const { rows } = await db.query('SELECT id FROM usuarios WHERE email = $1', [email]);
@@ -154,7 +155,7 @@ app.post('/api/usuarios/cadastro', asyncHandler(async (req, res) => {
     res.status(201).json({ id: result.rows[0].id, nome, email });
 }));
 
-app.post('/api/usuarios/login', asyncHandler(async (req, res) => {
+rotasPublicas.post('/usuarios/login', asyncHandler(async (req, res) => {
     const { email, senha } = req.body;
     if (!email || !senha) return res.status(400).json({ message: 'Email e senha são obrigatórios.' });
     const { rows } = await db.query('SELECT * FROM usuarios WHERE email = $1', [email]);
@@ -166,25 +167,20 @@ app.post('/api/usuarios/login', asyncHandler(async (req, res) => {
     res.json({ token, usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email } });
 }));
 
-app.post('/api/usuarios/recuperar-senha', asyncHandler(async (req, res) => {
+rotasPublicas.post('/usuarios/recuperar-senha', asyncHandler(async (req, res) => {
     const { email } = req.body;
     const { rows } = await db.query('SELECT * FROM usuarios WHERE email = $1', [email]);
     const usuario = rows[0];
-
     if (usuario) {
         const resetToken = crypto.randomBytes(32).toString('hex');
         const tokenHash = await bcrypt.hash(resetToken, 10);
-        const expires_at = new Date(Date.now() + 3600000); // 1 hora
-
+        const expires_at = new Date(Date.now() + 3600000);
         await db.query('DELETE FROM password_reset_tokens WHERE usuario_id = $1', [usuario.id]);
         await db.query('INSERT INTO password_reset_tokens (usuario_id, token, expires_at) VALUES ($1, $2, $3)', [usuario.id, tokenHash, expires_at]);
-
         const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS } });
         const resetLink = `${process.env.FRONTEND_URL}/resetar-senha.html?token=${resetToken}&id=${usuario.id}`;
         const mailOptions = {
-            from: `"Pegasus Finance" <${process.env.EMAIL_USER}>`,
-            to: email,
-            subject: 'Recuperação de Senha - Pegasus Finance',
+            from: `"Pegasus Finance" <${process.env.EMAIL_USER}>`, to: email, subject: 'Recuperação de Senha - Pegasus Finance',
             html: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;"><h2 style="color: #007bff;">Olá, ${usuario.nome}!</h2><p>Recebemos uma solicitação para redefinir sua senha no Pegasus Finance.</p><p>Se foi você, clique no botão abaixo para criar uma nova senha. Este link é válido por 1 hora.</p><p style="margin: 30px 0; text-align: center;"><a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Redefinir Minha Senha</a></p><p>Se você não solicitou isso, pode ignorar este e-mail com segurança. Nenhuma alteração será feita na sua conta.</p><hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;"><p style="font-size: 0.9em; color: #777;">Atenciosamente,<br><b>Equipe Pegasus Finance</b></p></div>`
         };
         await transporter.sendMail(mailOptions);
@@ -193,13 +189,11 @@ app.post('/api/usuarios/recuperar-senha', asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'Se um usuário com este email existir, um link de recuperação foi enviado.' });
 }));
 
-app.post('/api/usuarios/resetar-senha', asyncHandler(async (req, res) => {
+rotasPublicas.post('/usuarios/resetar-senha', asyncHandler(async (req, res) => {
     const { userId, token, novaSenha } = req.body;
     if (!userId || !token || !novaSenha) return res.status(400).json({ message: 'Dados inválidos.' });
-
     const { rows } = await db.query('SELECT * FROM password_reset_tokens WHERE usuario_id = $1 AND expires_at > NOW()', [userId]);
     if (rows.length === 0) return res.status(400).json({ message: 'Token inválido ou expirado.' });
-
     let tokenValido = false, tokenEntry;
     for (const row of rows) {
         if (await bcrypt.compare(token, row.token)) {
@@ -209,19 +203,16 @@ app.post('/api/usuarios/resetar-senha', asyncHandler(async (req, res) => {
         }
     }
     if (!tokenValido) return res.status(400).json({ message: 'Token inválido ou expirado.' });
-
     const senha_hash = await bcrypt.hash(novaSenha, 10);
     await db.query('UPDATE usuarios SET senha_hash = $1 WHERE id = $2', [senha_hash, userId]);
     await db.query('DELETE FROM password_reset_tokens WHERE id = $1', [tokenEntry.id]);
-    
     res.status(200).json({ message: 'Senha redefinida com sucesso!' });
 }));
 
 
-// Rotas Protegidas
+// 6.2 Roteador para Rotas Protegidas (precisam de token)
 const rotasProtegidas = express.Router();
 rotasProtegidas.use(autenticarToken);
-app.use('/api', rotasProtegidas);
 
 rotasProtegidas.get('/resumo', asyncHandler(async (req, res) => {
     const { mes, ano } = req.query;
@@ -260,7 +251,6 @@ rotasProtegidas.put('/transacoes/:id/prever', asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'Transação revertida para previsto!' });
 }));
 
-// Gráficos
 rotasProtegidas.get('/grafico/receita-vs-despesa', asyncHandler(async (req, res) => {
     const { inicio, fim } = req.query;
     const sql = `SELECT TO_CHAR(data, 'YYYY-MM') AS mes, SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END) AS receitas, SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE 0 END) AS despesas FROM transacoes WHERE usuario_id = $1 AND data BETWEEN $2 AND $3 AND status = 'efetivado' GROUP BY mes ORDER BY mes;`;
@@ -282,7 +272,6 @@ rotasProtegidas.get('/grafico/gastos-por-cartao', asyncHandler(async (req, res) 
     res.json(rows);
 }));
 
-// Matriz (Configurações)
 rotasProtegidas.get('/lancamentos-fixos', asyncHandler(async (req, res) => {
     const sql = 'SELECT lf.*, c.nome as nome_categoria FROM lancamentos_fixos lf LEFT JOIN categorias c ON lf.categoria_id = c.id WHERE lf.usuario_id = $1 ORDER BY lf.tipo, lf.descricao';
     const { rows } = await db.query(sql, [req.usuario.id]);
@@ -340,6 +329,10 @@ rotasProtegidas.delete('/cartoes/:id', asyncHandler(async (req, res) => {
     await db.query('DELETE FROM cartoes_de_credito WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
     res.status(204).send();
 }));
+
+// 6.3 Conexão dos Roteadores com a Aplicação Principal
+app.use('/api', rotasPublicas);
+app.use('/api', rotasProtegidas);
 
 
 // --- 7. MIDDLEWARE DE TRATAMENTO DE ERROS ---

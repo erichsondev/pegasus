@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pegasus Finance - Acompanhamento</title>
+    <link rel="icon" href="images/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
@@ -23,7 +24,7 @@
         }
         body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--cor-fundo); margin: 0; color: var(--cor-texto); }
         .header { background-color: var(--cor-primaria); color: var(--cor-branco); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .header h1 { margin: 0; font-size: 2em; font-weight: 700; }
+        .header h1 { margin: 0; font-size: 2em; font-weight: 700; display: flex; align-items: center; }
         
         .header-direita { display: flex; align-items: center; gap: 20px; }
         .header-usuario { text-align: right; }
@@ -85,7 +86,10 @@
 </head>
 <body>
     <header class="header">
-        <h1 id="titulo-pagina">📊 Acompanhamento</h1>
+        <h1 id="titulo-pagina">
+            <img src="images/logo.png" alt="Pegasus Finance Logo" style="height: 40px; vertical-align: middle; margin-right: 15px;">
+            📊 Acompanhamento
+        </h1>
         <div class="header-direita">
             <div class="selectors">
                 <select id="seletor-mes"></select>
@@ -214,8 +218,12 @@
             const mes = seletorMes.value;
             const ano = seletorAno.value;
             const nomeMes = seletorMes.options[seletorMes.selectedIndex].text;
-            tituloPagina.textContent = `📊 Acompanhamento de ${nomeMes}/${ano}`;
-            
+            // A linha abaixo foi ajustada para não sobrescrever o HTML do logo
+            const textoTitulo = `📊 Acompanhamento de ${nomeMes}/${ano}`;
+            const tituloElement = document.getElementById('titulo-pagina');
+            // Mantém a imagem e atualiza apenas o texto
+            tituloElement.childNodes[2].nodeValue = textoTitulo;
+
             const transacoes = await fetch(`${API_URL}/transacoes?mes=${mes}&ano=${ano}`, { headers }).then(res => res.json());
             const tbody = document.getElementById('tabela-transacoes');
             tbody.innerHTML = '';

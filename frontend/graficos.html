@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pegasus Finance - Análise Gráfica Melhorada</title>
+    <link rel="icon" href="images/favicon.ico" type="image/x-icon">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,7 +21,7 @@
         }
         body { font-family: 'Poppins', sans-serif; background-color: var(--cor-fundo); margin: 0; color: #333; }
         .header { background-color: var(--cor-primaria); color: var(--cor-branco); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex-wrap: wrap; gap: 20px;}
-        .header h1 { margin: 0; font-size: 2em; font-weight: 700; }
+        .header h1 { margin: 0; font-size: 2em; font-weight: 700; display: flex; align-items: center; }
         .header-content { display: flex; align-items: center; gap: 20px; flex-wrap: wrap;}
         
         .header-usuario { text-align: right; }
@@ -52,7 +53,10 @@
 </head>
 <body>
     <header class="header">
-        <h1>📈 Análise Gráfica</h1>
+        <h1>
+            <img src="images/logo.png" alt="Pegasus Finance Logo" style="height: 40px; vertical-align: middle; margin-right: 15px;">
+            📈 Análise Gráfica
+        </h1>
         <div class="header-content">
             <div class="selectors">
                 <label for="data-inicio">De:</label> <input type="date" id="data-inicio">

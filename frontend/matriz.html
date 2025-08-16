@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pegasus Finance - Configurações (Matriz)</title>
+    <link rel="icon" href="images/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
@@ -15,7 +16,7 @@
         }
         body { font-family: 'Poppins', sans-serif; background-color: var(--cor-fundo); margin: 0; color: var(--cor-texto); }
         .header { background-color: var(--cor-primaria); color: var(--cor-branco); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex-wrap: wrap; }
-        .header h1 { margin: 0; font-size: 2em; font-weight: 700; }
+        .header h1 { margin: 0; font-size: 2em; font-weight: 700; display: flex; align-items: center; }
         .header-direita { display: flex; align-items: center; gap: 20px; }
         .header-usuario { text-align: right; }
         .header-usuario p { margin: 0 0 5px 0; font-size: 0.9em; font-weight: 600; }
@@ -47,7 +48,10 @@
 </head>
 <body>
     <header class="header">
-        <h1>⚙️ Configurações (Matriz)</h1>
+        <h1>
+            <img src="images/logo.png" alt="Pegasus Finance Logo" style="height: 40px; vertical-align: middle; margin-right: 15px;">
+            ⚙️ Configurações (Matriz)
+        </h1>
         <div class="header-direita">
             <div class="header-usuario"><p id="saudacao-usuario">Olá!</p><button id="btn-sair">Sair</button></div>
             <a href="./menu.html" class="btn-voltar">❮ Menu</a>

@@ -1,0 +1,38 @@
+# Nome da nossa automação
+name: Keep Database Alive
+
+# Gatilho: define QUANDO a automação deve rodar
+on:
+  schedule:
+    # Roda à meia-noite nos dias 1 e 15 de cada mês (formato cron)
+    - cron: '0 0 1,15 * *'
+  # Permite que você rode manualmente pela aba "Actions" do GitHub
+  workflow_dispatch:
+
+# Tarefas: define O QUE a automação deve fazer
+jobs:
+  ping-db:
+    # Usa a versão mais recente do Ubuntu como "computador virtual"
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Baixa o código do seu repositório para o computador virtual
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. Configura o Node.js para que possamos rodar o script
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20' # Mesma versão que você usa na Render
+
+      # 3. Instala as dependências necessárias (pg e dotenv)
+      - name: Install dependencies
+        run: npm install
+
+      # 4. Roda o nosso script keep-alive
+      - name: Run keep-alive script
+        run: node keep-alive.js
+        # Pega o segredo que configuramos e o torna disponível para o script
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

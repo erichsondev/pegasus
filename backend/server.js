@@ -163,6 +163,12 @@ const asyncHandler = fn => (req, res, next) => {
 
 // --- 6. ROTAS DA API (ORGANIZADAS) ---
 
+// Rota pública de "health check" para manter o servidor acordado
+app.get('/api/status', (req, res) => {
+    console.log('Servidor "pingado" para se manter ativo.');
+    res.json({ status: 'ok', message: 'Servidor está ativo.' });
+});
+
 // 6.1 Roteador para Rotas Públicas
 const rotasPublicas = express.Router();
 

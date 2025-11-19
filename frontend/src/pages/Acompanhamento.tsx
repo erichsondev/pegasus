@@ -19,13 +19,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
-  obterTransacoes,
   adicionarTransacao,
   editarTransacao,
   removerTransacao,
   obterCategorias,
   obterCartoes,
-  obterResumo,
   type Transacao,
   type Categoria,
   type Cartao,
@@ -52,12 +50,14 @@ const Acompanhamento = () => {
     efetivado: false
   });
 
+  // Inicializa com o mês atual
   useEffect(() => {
     const hoje = new Date();
     const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
     setMesSelecionado(mesAtual);
   }, []);
 
+  // Recarrega sempre que o mês mudar
   useEffect(() => {
     if (mesSelecionado) {
       carregarDados();
@@ -66,20 +66,32 @@ const Acompanhamento = () => {
 
   const carregarDados = async () => {
     const [ano, mes] = mesSelecionado.split('-').map(Number);
+    const token = localStorage.getItem("token");
+    const headers = { Authorization: `Bearer ${token}` };
     
     try {
-      const [transacoesData, categoriasData, cartoesData, resumoData] = await Promise.all([
-        obterTransacoes(ano, mes),
+      // 1. Busca Categorias e Cartões (Auxiliares)
+      const [categoriasData, cartoesData] = await Promise.all([
         obterCategorias(),
-        obterCartoes(),
-        obterResumo(ano, mes)
+        obterCartoes()
       ]);
-      
-      setTransacoes(transacoesData);
       setCategorias(categoriasData);
       setCartoes(cartoesData);
-      setResumo(resumoData);
+
+      // 2. Busca Transações DO MÊS SELECIONADO (Fetch Direto para garantir o filtro)
+      const resTransacoes = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes?ano=${ano}&mes=${mes}`, { headers });
+      if (resTransacoes.ok) {
+        setTransacoes(await resTransacoes.json());
+      }
+
+      // 3. Busca Resumo DO MÊS SELECIONADO (Fetch Direto)
+      const resResumo = await fetch(`${import.meta.env.VITE_API_URL}/api/resumo?ano=${ano}&mes=${mes}`, { headers });
+      if (resResumo.ok) {
+        setResumo(await resResumo.json());
+      }
+
     } catch (error) {
+      console.error(error);
       toast({
         title: "Erro ao carregar dados",
         description: "Verifique sua conexão",
@@ -93,6 +105,7 @@ const Acompanhamento = () => {
     
     const [ano, mes] = mesSelecionado.split('-');
     const dia = new Date().getDate();
+    // Usa o ano/mês selecionado para criar a data, mas mantém o dia atual (ou 01 se preferir)
     const dataFormatada = `${ano}-${mes}-${String(dia).padStart(2, '0')}`;
     
     const transacao = {
@@ -115,10 +128,11 @@ const Acompanhamento = () => {
         toast({ title: "Transação adicionada com sucesso!" });
       }
 
+      // Limpa o formulário mas mantém o tipo para facilitar lançamentos em sequência
       setFormData({
         descricao: "",
         valor: "",
-        tipo: "receita",
+        tipo: formData.tipo, 
         categoria_id: "",
         cartao_id: "",
         efetivado: false
@@ -143,7 +157,6 @@ const Acompanhamento = () => {
       cartao_id: transacao.cartao_id?.toString() || "",
       efetivado: transacao.status === 'efetivado'
     });
-    // Rolar para o formulário em telas pequenas
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -153,10 +166,7 @@ const Acompanhamento = () => {
       carregarDados();
       toast({ title: "Transação removida!" });
     } catch (error) {
-      toast({
-        title: "Erro ao remover",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao remover", variant: "destructive" });
     }
   };
 
@@ -178,59 +188,58 @@ const Acompanhamento = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
-      {/* 1. Header com Botão de Voltar Ativado */}
+    // REMOVIDO bg-slate-50 para o fundo azulzinho (gradient body) aparecer
+    <div className="min-h-screen pb-20">
       <Header showBack={true} backPath="/menu" />
 
       <main className="container mx-auto px-4 md:px-6 py-8 animate-fade-in">
         
-        {/* 2. Controle de Mês e Título */}
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+        {/* Controle de Mês */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8 bg-white/70 backdrop-blur-md p-4 rounded-xl shadow-sm border border-white/50">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">Acompanhamento</h2>
-            <p className="text-slate-500 text-sm">Controle detalhado de entradas e saídas.</p>
+            <p className="text-slate-600 text-sm">Controle detalhado de entradas e saídas.</p>
           </div>
-          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
-            <Calendar className="w-5 h-5 text-slate-500 ml-2" />
+          <div className="flex items-center gap-2 bg-white p-1 rounded-lg shadow-sm border border-slate-100">
+            <Calendar className="w-5 h-5 text-primary ml-2" />
             <Input
               type="month"
               value={mesSelecionado}
               onChange={(e) => setMesSelecionado(e.target.value)}
-              className="border-none bg-transparent shadow-none focus-visible:ring-0 w-40 font-medium text-slate-700"
+              className="border-none bg-transparent shadow-none focus-visible:ring-0 w-40 font-medium text-slate-700 cursor-pointer"
             />
           </div>
         </div>
 
-        {/* 3. Layout Principal com Abas para Mobile/Desktop */}
         <Tabs defaultValue="geral" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 md:w-[400px] md:mx-auto">
+          <TabsList className="grid w-full grid-cols-2 md:w-[400px] md:mx-auto bg-white/50">
             <TabsTrigger value="geral">Visão Geral</TabsTrigger>
             <TabsTrigger value="lancamentos">Lançamentos</TabsTrigger>
           </TabsList>
 
-          {/* CONTEÚDO DA ABA 1: VISÃO GERAL (RESUMO) */}
+          {/* ABA 1: VISÃO GERAL */}
           <TabsContent value="geral">
             {resumo && (
               <div className="space-y-6">
-                {/* Grupo 1: Realidade (Fluxo de Caixa) */}
+                {/* Realizado */}
                 <div>
-                  <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
-                    <Wallet className="w-4 h-4" /> Fluxo de Caixa (Efetivado)
+                  <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
+                    <Wallet className="w-4 h-4" /> Fluxo de Caixa (Realizado)
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card className="border-l-4 border-l-green-500 shadow-sm">
+                    <Card className="border-l-4 border-l-green-500 shadow-sm glass-card">
                       <CardContent className="pt-6">
                         <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Receitas Reais</p>
                         <p className="text-2xl font-bold text-green-600">{formatarMoeda(resumo.totalReceitasEfetivadas)}</p>
                       </CardContent>
                     </Card>
-                    <Card className="border-l-4 border-l-red-500 shadow-sm">
+                    <Card className="border-l-4 border-l-red-500 shadow-sm glass-card">
                       <CardContent className="pt-6">
                         <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Despesas Pagas</p>
                         <p className="text-2xl font-bold text-red-600">{formatarMoeda(resumo.totalDespesasEfetivadas)}</p>
                       </CardContent>
                     </Card>
-                    <Card className="border-l-4 border-l-blue-600 shadow-sm bg-blue-50/50">
+                    <Card className="border-l-4 border-l-blue-600 shadow-sm bg-blue-50/80 backdrop-blur-sm">
                       <CardContent className="pt-6">
                         <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Saldo em Conta</p>
                         <p className="text-2xl font-bold text-blue-700">{formatarMoeda(resumo.saldoAtualAcumulado)}</p>
@@ -239,27 +248,27 @@ const Acompanhamento = () => {
                   </div>
                 </div>
 
-                {/* Grupo 2: Previsão (Orçamento) */}
+                {/* Previsto */}
                 <div>
-                  <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" /> Previsão (Agendado)
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card className="border-dashed border-2 border-slate-200 shadow-none bg-transparent opacity-80">
+                    <Card className="border-dashed border-2 border-slate-300/50 shadow-none bg-white/30">
                       <CardContent className="pt-6">
-                        <p className="text-xs text-slate-400 font-semibold uppercase mb-1">Receitas Previstas</p>
+                        <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Receitas Previstas</p>
                         <p className="text-xl font-bold text-slate-600">{formatarMoeda(resumo.totalReceitasPrevistas)}</p>
                       </CardContent>
                     </Card>
-                    <Card className="border-dashed border-2 border-slate-200 shadow-none bg-transparent opacity-80">
+                    <Card className="border-dashed border-2 border-slate-300/50 shadow-none bg-white/30">
                       <CardContent className="pt-6">
-                        <p className="text-xs text-slate-400 font-semibold uppercase mb-1">Despesas Previstas</p>
+                        <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Despesas Previstas</p>
                         <p className="text-xl font-bold text-slate-600">{formatarMoeda(resumo.totalDespesasPrevistas)}</p>
                       </CardContent>
                     </Card>
-                    <Card className="border-dashed border-2 border-slate-200 shadow-none bg-transparent opacity-80">
+                    <Card className="border-dashed border-2 border-slate-300/50 shadow-none bg-white/30">
                       <CardContent className="pt-6">
-                        <p className="text-xs text-slate-400 font-semibold uppercase mb-1">Projeção Final</p>
+                        <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Projeção Final</p>
                         <p className="text-xl font-bold text-slate-700">{formatarMoeda(resumo.saldoFinalProjetado)}</p>
                       </CardContent>
                     </Card>
@@ -269,13 +278,13 @@ const Acompanhamento = () => {
             )}
           </TabsContent>
 
-          {/* CONTEÚDO DA ABA 2: LANÇAMENTOS (FORM + LISTA) */}
+          {/* ABA 2: LANÇAMENTOS */}
           <TabsContent value="lancamentos">
             <div className="grid lg:grid-cols-[350px_1fr] gap-8">
               
-              {/* Coluna 1: Formulário */}
+              {/* Formulário */}
               <div className="order-2 lg:order-1">
-                <Card className={`sticky top-24 transition-all ${editandoId ? 'border-blue-500 ring-2 ring-blue-100' : ''}`}>
+                <Card className={`sticky top-24 transition-all glass-card ${editandoId ? 'border-blue-500 ring-2 ring-blue-100' : ''}`}>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
                       {editandoId ? <Pencil className="w-4 h-4 text-blue-600" /> : <Wallet className="w-4 h-4 text-slate-500" />}
@@ -383,9 +392,9 @@ const Acompanhamento = () => {
                 </Card>
               </div>
 
-              {/* Coluna 2: Lista de Transações */}
+              {/* Lista */}
               <div className="order-1 lg:order-2 space-y-4">
-                <div className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-slate-100">
+                <div className="flex justify-between items-center bg-white/60 p-3 rounded-lg shadow-sm border border-slate-100 backdrop-blur-sm">
                   <h3 className="font-bold text-slate-700">Extrato do Mês</h3>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -397,7 +406,7 @@ const Acompanhamento = () => {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Cuidado Absoluto!</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Isso apagará <b>todas</b> as transações deste mês. Não é possível desfazer. Tem certeza?
+                          Isso apagará <b>todas</b> as transações deste mês.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -408,18 +417,17 @@ const Acompanhamento = () => {
                   </AlertDialog>
                 </div>
 
-                {/* Lista Scrollável */}
                 <div className="space-y-3">
                   {transacoes.length === 0 ? (
-                    <div className="text-center py-16 bg-white rounded-lg border border-dashed border-slate-200">
-                      <p className="text-slate-400 mb-2">Nenhuma transação encontrada.</p>
-                      <p className="text-xs text-slate-300">Use o formulário para começar.</p>
+                    <div className="text-center py-16 bg-white/40 rounded-lg border border-dashed border-slate-300">
+                      <p className="text-slate-500 mb-2">Nenhuma transação encontrada.</p>
+                      <p className="text-xs text-slate-400">Use o formulário para começar.</p>
                     </div>
                   ) : (
                     transacoes.map(transacao => (
                       <div 
                         key={transacao.id} 
-                        className={`group flex items-center justify-between p-4 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'opacity-75 bg-slate-50/50' : ''}`}
+                        className={`group flex items-center justify-between p-4 bg-white/80 border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'opacity-75 bg-slate-50/50' : ''}`}
                       >
                         <div className="flex items-center gap-4 overflow-hidden">
                           <div className={`p-2 rounded-full ${transacao.tipo === 'receita' ? 'bg-green-100' : 'bg-red-100'}`}>
@@ -464,7 +472,6 @@ const Acompanhamento = () => {
             </div>
           </TabsContent>
         </Tabs>
-
       </main>
     </div>
   );

@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
 import { Header } from "@/components/Header";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -15,27 +14,23 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 interface Transacao {
   id: number;
   descricao: string;
-  valor: number; // Vem como string ou number do banco
+  valor: number;
   tipo: 'receita' | 'despesa';
   status: string;
   data: string;
   nome_categoria: string;
-  cartao_id?: number;
 }
 
 const Graficos = () => {
   const [mesInicio, setMesInicio] = useState("");
   const [mesFim, setMesFim] = useState("");
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  // Configuração inicial de datas (Mês atual)
   useEffect(() => {
     const hoje = new Date();
     const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
     
-    // Padrão: Começa no dia 1 do ano atual ou 3 meses atrás
     const dataInicio = new Date();
     dataInicio.setMonth(dataInicio.getMonth() - 3);
     const mesPassado = `${dataInicio.getFullYear()}-${String(dataInicio.getMonth() + 1).padStart(2, '0')}`;
@@ -51,18 +46,13 @@ const Graficos = () => {
   }, [mesInicio, mesFim]);
 
   const carregarDados = async () => {
-    setIsLoading(true);
     try {
       const token = localStorage.getItem("token");
-      
-      // Vamos buscar mês a mês para compor o período (solução frontend para não mexer no backend agora)
-      // O ideal seria ter uma rota /transacoes/periodo, mas vamos usar o loop para garantir
-      
-      const start = new Date(mesInicio + "-02"); // Dia 2 para evitar fuso horario caindo no mes anterior
+      const start = new Date(mesInicio + "-02");
       const end = new Date(mesFim + "-02");
       let todasTransacoes: Transacao[] = [];
 
-      // Loop simples para pegar todos os meses do intervalo
+      // Loop para buscar todos os meses do intervalo
       for (let d = new Date(start); d <= end; d.setMonth(d.getMonth() + 1)) {
         const ano = d.getFullYear();
         const mes = d.getMonth() + 1;
@@ -76,27 +66,18 @@ const Graficos = () => {
           todasTransacoes = [...todasTransacoes, ...dados];
         }
       }
-
-      // Remover duplicadas se houver e garantir tipagem
       setTransacoes(todasTransacoes);
-
     } catch (error) {
-      console.error("Erro ao carregar dados", error);
       toast({ title: "Erro ao carregar dados", variant: "destructive" });
-    } finally {
-      setIsLoading(false);
     }
   };
-
-  // --- CÁLCULOS E PROCESSAMENTO DE DADOS (BI) ---
 
   const kpis = useMemo(() => {
     const receitas = transacoes.filter(t => t.tipo === 'receita').reduce((acc, t) => acc + Number(t.valor), 0);
     const despesas = transacoes.filter(t => t.tipo === 'despesa').reduce((acc, t) => acc + Number(t.valor), 0);
     const saldo = receitas - despesas;
     const economia = receitas > 0 ? ((receitas - despesas) / receitas) * 100 : 0;
-
-    // Fechamento (Efetivado vs Previsto)
+    
     const despesasEfetivadas = transacoes
       .filter(t => t.tipo === 'despesa' && t.status === 'efetivado')
       .reduce((acc, t) => acc + Number(t.valor), 0);
@@ -115,20 +96,20 @@ const Graficos = () => {
     });
     return Array.from(map.entries())
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value); // Ordenar maior para menor
+      .sort((a, b) => b.value - a.value);
   }, [transacoes]);
 
   const maioresGastos = useMemo(() => {
     return transacoes
       .filter(t => t.tipo === 'despesa')
       .sort((a, b) => Number(b.valor) - Number(a.valor))
-      .slice(0, 5); // Top 5
+      .slice(0, 5);
   }, [transacoes]);
 
   const dadosEvolucao = useMemo(() => {
-    const map = new Map(); // Chave: "YYYY-MM"
+    const map = new Map();
     transacoes.forEach(t => {
-      const mesAno = t.data.substring(0, 7); // Pega YYYY-MM
+      const mesAno = t.data.substring(0, 7);
       if (!map.has(mesAno)) map.set(mesAno, { mes: mesAno, receitas: 0, despesas: 0 });
       const atual = map.get(mesAno);
       if (t.tipo === 'receita') atual.receitas += Number(t.valor);
@@ -138,7 +119,6 @@ const Graficos = () => {
   }, [transacoes]);
 
   const dreData = useMemo(() => {
-    // Agrupar por categoria para o DRE
     const receitasMap = new Map();
     const despesasMap = new Map();
 
@@ -160,32 +140,31 @@ const Graficos = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
+    // REMOVIDO bg-slate-50 para o fundo azulzinho aparecer
+    <div className="min-h-screen pb-20">
       <Header showBack={true} backPath="/menu" />
 
       <main className="container mx-auto px-4 md:px-6 py-8 animate-fade-in">
         
-        {/* Header da Página com Filtros */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8 bg-white/70 p-4 rounded-xl shadow-sm border border-white/50 backdrop-blur-md">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">Inteligência Financeira</h2>
-            <p className="text-slate-500 text-sm">Analise seus resultados e tome decisões melhores.</p>
+            <p className="text-slate-600 text-sm">Analise seus resultados.</p>
           </div>
           <div className="flex gap-4 items-center w-full md:w-auto">
             <div className="w-full md:w-auto">
-              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Início</label>
-              <Input type="month" value={mesInicio} onChange={(e) => setMesInicio(e.target.value)} className="bg-slate-50 border-slate-200" />
+              <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Início</label>
+              <Input type="month" value={mesInicio} onChange={(e) => setMesInicio(e.target.value)} className="bg-white border-slate-200" />
             </div>
             <div className="w-full md:w-auto">
-              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Fim</label>
-              <Input type="month" value={mesFim} onChange={(e) => setMesFim(e.target.value)} className="bg-slate-50 border-slate-200" />
+              <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Fim</label>
+              <Input type="month" value={mesFim} onChange={(e) => setMesFim(e.target.value)} className="bg-white border-slate-200" />
             </div>
           </div>
         </div>
 
-        {/* KPIs - Indicadores Principais */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <Card className="border-none shadow-sm hover:shadow-md transition-shadow">
+          <Card className="border-none shadow-sm glass-card">
             <CardContent className="p-6 flex flex-col gap-1">
               <span className="text-sm font-medium text-slate-500 flex items-center gap-2">
                 <ArrowUpCircle className="w-4 h-4 text-green-500" /> Receitas
@@ -193,7 +172,7 @@ const Graficos = () => {
               <span className="text-2xl font-bold text-slate-800">{formatarMoeda(kpis.receitas)}</span>
             </CardContent>
           </Card>
-          <Card className="border-none shadow-sm hover:shadow-md transition-shadow">
+          <Card className="border-none shadow-sm glass-card">
             <CardContent className="p-6 flex flex-col gap-1">
               <span className="text-sm font-medium text-slate-500 flex items-center gap-2">
                 <ArrowDownCircle className="w-4 h-4 text-red-500" /> Despesas
@@ -201,7 +180,7 @@ const Graficos = () => {
               <span className="text-2xl font-bold text-slate-800">{formatarMoeda(kpis.despesas)}</span>
             </CardContent>
           </Card>
-          <Card className="border-none shadow-sm hover:shadow-md transition-shadow bg-gradient-to-br from-blue-600 to-blue-700 text-white">
+          <Card className="border-none shadow-sm bg-blue-600 text-white">
             <CardContent className="p-6 flex flex-col gap-1">
               <span className="text-sm font-medium text-blue-100 flex items-center gap-2">
                 <DollarSign className="w-4 h-4" /> Saldo Líquido
@@ -209,29 +188,26 @@ const Graficos = () => {
               <span className="text-2xl font-bold">{formatarMoeda(kpis.saldo)}</span>
             </CardContent>
           </Card>
-          <Card className="border-none shadow-sm hover:shadow-md transition-shadow">
+          <Card className="border-none shadow-sm glass-card">
             <CardContent className="p-6 flex flex-col gap-4">
               <div className="flex justify-between items-end">
                 <span className="text-sm font-medium text-slate-500 flex items-center gap-2">
-                   <TrendingUp className="w-4 h-4 text-purple-500" /> Taxa de Poupança
+                   <TrendingUp className="w-4 h-4 text-purple-500" /> Economia
                 </span>
                 <span className={`text-xl font-bold ${kpis.economia > 0 ? 'text-green-600' : 'text-red-500'}`}>
                   {kpis.economia.toFixed(1)}%
                 </span>
               </div>
-              <Progress value={Math.max(0, kpis.economia)} className="h-2 bg-slate-100" />
+              <Progress value={Math.max(0, kpis.economia)} className="h-2 bg-slate-200" />
             </CardContent>
           </Card>
         </div>
 
-        {/* Status do Fechamento e Evolução */}
         <div className="grid lg:grid-cols-3 gap-8 mb-8">
-          
-          {/* Gráfico de Evolução (Área) */}
-          <Card className="lg:col-span-2 border-none shadow-md">
+          <Card className="lg:col-span-2 border-none shadow-md glass-card">
             <CardHeader>
               <CardTitle>Evolução Patrimonial</CardTitle>
-              <CardDescription>Histórico de entradas e saídas no período selecionado.</CardDescription>
+              <CardDescription>Entradas e saídas por mês.</CardDescription>
             </CardHeader>
             <CardContent className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -249,10 +225,7 @@ const Graficos = () => {
                   <XAxis dataKey="mes" stroke="#94a3b8" fontSize={12} />
                   <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(val) => `R$ ${val/1000}k`} />
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                  <RechartsTooltip 
-                    formatter={(value: number) => formatarMoeda(value)}
-                    contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
-                  />
+                  <RechartsTooltip formatter={(value: number) => formatarMoeda(value)} />
                   <Legend />
                   <Area type="monotone" dataKey="receitas" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorReceitas)" name="Receitas" />
                   <Area type="monotone" dataKey="despesas" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorDespesas)" name="Despesas" />
@@ -261,28 +234,24 @@ const Graficos = () => {
             </CardContent>
           </Card>
 
-          {/* Card de Status do Fechamento (Novo) */}
           <div className="flex flex-col gap-4">
-            <Card className="border-none shadow-md flex-1">
+            <Card className="border-none shadow-md flex-1 glass-card">
               <CardHeader>
-                <CardTitle className="text-lg">Status do Fechamento</CardTitle>
-                <CardDescription>Comprometimento efetivado vs. previsto.</CardDescription>
+                <CardTitle className="text-lg">Fechamento</CardTitle>
+                <CardDescription>Meta de gastos.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
                    <div className="flex justify-between text-sm mb-2">
-                     <span className="text-slate-500">Despesas Pagas</span>
+                     <span className="text-slate-500">Comprometido</span>
                      <span className="font-bold text-slate-700">{kpis.progressoFechamento.toFixed(1)}%</span>
                    </div>
-                   <Progress value={kpis.progressoFechamento} className="h-3 bg-slate-100" />
-                   <p className="text-xs text-muted-foreground mt-2 text-right">
-                     {formatarMoeda(kpis.despesasEfetivadas)} de {formatarMoeda(kpis.despesas)}
-                   </p>
+                   <Progress value={kpis.progressoFechamento} className="h-3 bg-slate-200" />
                 </div>
 
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                <div className="bg-white/50 p-4 rounded-lg border border-slate-100">
                   <h4 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-orange-500" /> Maiores Gastos
+                    <AlertCircle className="w-4 h-4 text-orange-500" /> Top Gastos
                   </h4>
                   <div className="space-y-3">
                     {maioresGastos.map((t) => (
@@ -299,16 +268,15 @@ const Graficos = () => {
           </div>
         </div>
 
-        {/* Abas para DRE e Categorias */}
         <Tabs defaultValue="categorias" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 max-w-[400px] mb-4">
+          <TabsList className="grid w-full grid-cols-2 max-w-[400px] mb-4 bg-white/50">
             <TabsTrigger value="categorias">Categorias</TabsTrigger>
-            <TabsTrigger value="dre">DRE Gerencial</TabsTrigger>
+            <TabsTrigger value="dre">DRE</TabsTrigger>
           </TabsList>
           
           <TabsContent value="categorias">
-            <Card className="border-none shadow-md">
-              <CardHeader><CardTitle>Detalhamento por Categoria</CardTitle></CardHeader>
+            <Card className="border-none shadow-md glass-card">
+              <CardHeader><CardTitle>Por Categoria</CardTitle></CardHeader>
               <CardContent className="h-[350px] flex flex-col md:flex-row items-center">
                 <div className="w-full md:w-1/2 h-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -333,64 +301,48 @@ const Graficos = () => {
                       <div key={index} className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
                         <span className="text-slate-600 truncate">{entry.name}</span>
-                        <span className="font-semibold ml-auto">{formatarMoeda(entry.value)}</span>
                       </div>
                     ))}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
-
+          
           <TabsContent value="dre">
-            <Card className="border-none shadow-md">
-              <CardHeader><CardTitle>Demonstrativo (DRE)</CardTitle></CardHeader>
-              <CardContent>
-                 <div className="space-y-6">
-                    {/* Bloco Receitas */}
+             <Card className="border-none shadow-md glass-card">
+               <CardHeader><CardTitle>DRE Gerencial</CardTitle></CardHeader>
+               <CardContent>
+                 <div className="space-y-4">
                     <div>
-                       <h3 className="text-green-600 font-bold text-lg mb-2 border-b border-green-100 pb-1">Receitas</h3>
-                       <div className="space-y-2">
-                         {dreData.receitas.map((r, i) => (
-                            <div key={i} className="flex justify-between text-slate-600 text-sm hover:bg-slate-50 p-1 rounded">
-                               <span>{r.nome}</span>
-                               <span>{formatarMoeda(r.valor)}</span>
-                            </div>
-                         ))}
-                         <div className="flex justify-between font-bold text-slate-800 pt-2 mt-2 border-t">
-                            <span>Total Receitas</span>
-                            <span>{formatarMoeda(kpis.receitas)}</span>
+                       <h4 className="font-bold text-green-600 border-b pb-1 mb-2">Receitas</h4>
+                       {dreData.receitas.map((r, i) => (
+                         <div key={i} className="flex justify-between text-sm text-slate-600">
+                           <span>{r.nome}</span><span>{formatarMoeda(r.valor)}</span>
                          </div>
+                       ))}
+                       <div className="flex justify-between font-bold mt-2 pt-2 border-t">
+                         <span>Total</span><span>{formatarMoeda(kpis.receitas)}</span>
                        </div>
                     </div>
-
-                    {/* Bloco Despesas */}
                     <div>
-                       <h3 className="text-red-600 font-bold text-lg mb-2 border-b border-red-100 pb-1">Despesas</h3>
-                       <div className="space-y-2">
-                         {dreData.despesas.map((r, i) => (
-                            <div key={i} className="flex justify-between text-slate-600 text-sm hover:bg-slate-50 p-1 rounded">
-                               <span>{r.nome}</span>
-                               <span>{formatarMoeda(r.valor)}</span>
-                            </div>
-                         ))}
-                         <div className="flex justify-between font-bold text-slate-800 pt-2 mt-2 border-t">
-                            <span>Total Despesas</span>
-                            <span>{formatarMoeda(kpis.despesas)}</span>
+                       <h4 className="font-bold text-red-600 border-b pb-1 mb-2">Despesas</h4>
+                       {dreData.despesas.map((r, i) => (
+                         <div key={i} className="flex justify-between text-sm text-slate-600">
+                           <span>{r.nome}</span><span>{formatarMoeda(r.valor)}</span>
                          </div>
+                       ))}
+                       <div className="flex justify-between font-bold mt-2 pt-2 border-t">
+                         <span>Total</span><span>{formatarMoeda(kpis.despesas)}</span>
                        </div>
                     </div>
-
-                    {/* Resultado */}
-                    <div className={`flex justify-between font-bold text-xl p-4 rounded-lg ${kpis.saldo >= 0 ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'}`}>
-                        <span>Resultado do Período</span>
-                        <span>{formatarMoeda(kpis.saldo)}</span>
+                    <div className={`flex justify-between font-bold text-lg p-3 rounded ${kpis.saldo >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                       <span>Resultado</span><span>{formatarMoeda(kpis.saldo)}</span>
                     </div>
                  </div>
-              </CardContent>
-            </Card>
+               </CardContent>
+             </Card>
           </TabsContent>
         </Tabs>
-
       </main>
     </div>
   );

@@ -8,6 +8,7 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
+    /* Variáveis de Cor Originais (Mantidas) */
     --background: 211 100% 98%;
     --foreground: 222 47% 11%;
 
@@ -45,26 +46,21 @@ All colors MUST be HSL.
     --input: 214 32% 91%;
     --ring: 211 100% 50%;
 
-    --radius: 0.5rem;
+    /* ATUALIZAÇÃO: Bordas mais arredondadas para visual moderno (era 0.5rem) */
+    --radius: 0.75rem;
 
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     --shadow: 0 4px 15px rgba(0, 123, 255, 0.1);
     --shadow-lg: 0 10px 40px rgba(0, 123, 255, 0.15);
 
+    /* Sidebar (Mantido) */
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
@@ -105,6 +101,7 @@ All colors MUST be HSL.
     --border: 217 33% 18%;
     --input: 217 33% 18%;
     --ring: 211 100% 50%;
+
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -124,5 +121,48 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
     font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    
+    /* NOVO: Fundo Gradiente Sutil para dar profundidade (Efeito Premium) */
+    background-image: radial-gradient(at 0% 0%, hsla(215, 90%, 95%, 1) 0px, transparent 50%),
+                      radial-gradient(at 100% 0%, hsla(180, 80%, 95%, 1) 0px, transparent 50%),
+                      radial-gradient(at 100% 100%, hsla(260, 80%, 97%, 1) 0px, transparent 50%);
+    background-attachment: fixed; /* Fundo fica fixo ao rolar */
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* UTILITÁRIOS NOVOS PARA UI MODERNA */
+@layer utilities {
+  /* Efeito Vidro Fosco (Glassmorphism) */
+  .glass-card {
+    @apply bg-white/70 backdrop-blur-lg border border-white/40 shadow-lg;
+  }
+
+  /* Animação de Entrada Suave */
+  .animate-fade-in {
+    animation: enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes enter {
+    0% {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Scrollbar Personalizada (Mais elegante) */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
   }
 }

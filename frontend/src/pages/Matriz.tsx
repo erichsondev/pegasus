@@ -404,7 +404,6 @@ const Matriz = () => {
                      value={novoLancamento.data_fim}
                      onChange={(e) => setNovoLancamento({ ...novoLancamento, data_fim: e.target.value })}
                    />
-                   <span className="text-[10px] text-muted-foreground">Deixe vazio se for para sempre</span>
                 </div>
 
                 <div className="md:col-span-2 flex gap-2">

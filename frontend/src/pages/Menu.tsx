@@ -9,7 +9,7 @@ import {
   Settings, 
   ArrowRight, 
   Wallet, 
-  CalendarClock
+  Lightbulb // Ícone de lâmpada para dicas
 } from "lucide-react";
 import { obterResumo, obterNomeUsuario } from "@/lib/storage";
 
@@ -20,11 +20,15 @@ const Menu = () => {
   const [saudacao, setSaudacao] = useState("");
 
   useEffect(() => {
-    // 1. Carregar Nome
-    const nomeSalvo = obterNomeUsuario();
-    if (nomeSalvo) setNome(nomeSalvo.split(" ")[0]); // Pega só o primeiro nome
+    // 1. Carregar Nome de forma segura
+    try {
+      const nomeSalvo = obterNomeUsuario();
+      if (nomeSalvo) setNome(nomeSalvo.split(" ")[0]); 
+    } catch (e) {
+      console.error("Erro ao carregar nome", e);
+    }
 
-    // 2. Definir Saudação (Bom dia/tarde/noite)
+    // 2. Definir Saudação
     const hora = new Date().getHours();
     if (hora < 12) setSaudacao("Bom dia");
     else if (hora < 18) setSaudacao("Boa tarde");
@@ -35,9 +39,14 @@ const Menu = () => {
       const hoje = new Date();
       try {
         const resumo = await obterResumo(hoje.getFullYear(), hoje.getMonth() + 1);
-        if (resumo) setSaldo(resumo.saldoAtualAcumulado);
+        if (resumo) {
+          setSaldo(resumo.saldoAtualAcumulado);
+        } else {
+          setSaldo(0);
+        }
       } catch (e) {
-        console.error("Erro ao carregar saldo rápido");
+        console.error("Erro ao carregar saldo", e);
+        setSaldo(0);
       }
     };
     carregarSaldo();
@@ -47,13 +56,13 @@ const Menu = () => {
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
-    <div className="min-h-screen pb-10">
-      {/* Header Principal (sem botão voltar, pois esta é a Home) */}
+    <div className="min-h-screen pb-10 bg-background">
+      {/* Header Padrão */}
       <Header />
 
       <main className="container mx-auto px-4 py-8 max-w-4xl animate-fade-in">
         
-        {/* Cabeçalho de Boas Vindas */}
+        {/* Boas Vindas */}
         <div className="mb-8 space-y-1">
           <h1 className="text-3xl font-bold text-slate-800">
             {saudacao}, <span className="text-primary">{nome}</span>!
@@ -61,7 +70,7 @@ const Menu = () => {
           <p className="text-muted-foreground">Aqui está o panorama das suas finanças hoje.</p>
         </div>
 
-        {/* Card de Destaque (Saldo) */}
+        {/* Card Destaque: Saldo */}
         <div className="mb-10">
            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white shadow-xl shadow-blue-200 hover:shadow-2xl transition-shadow duration-300">
               {/* Efeitos de fundo */}
@@ -87,11 +96,11 @@ const Menu = () => {
            </div>
         </div>
 
-        {/* Grid de Navegação */}
+        {/* Grid de Acesso Rápido */}
         <h3 className="text-lg font-semibold text-slate-700 mb-4">Acesso Rápido</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
-          {/* Atalho Acompanhamento */}
+          {/* Acompanhamento */}
           <Card 
             className="group cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300 border-slate-100 glass-card"
             onClick={() => navigate("/acompanhamento")}
@@ -112,7 +121,7 @@ const Menu = () => {
             </CardContent>
           </Card>
 
-          {/* Atalho Gráficos */}
+          {/* Gráficos */}
           <Card 
             className="group cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300 border-slate-100 glass-card"
             onClick={() => navigate("/graficos")}
@@ -133,7 +142,7 @@ const Menu = () => {
             </CardContent>
           </Card>
 
-          {/* Atalho Configurações */}
+          {/* Configurações */}
           <Card 
             className="group cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300 border-slate-100 glass-card"
             onClick={() => navigate("/matriz")}
@@ -145,7 +154,7 @@ const Menu = () => {
                 </div>
                 <h3 className="text-xl font-bold text-slate-800 mb-2">Configurações</h3>
                 <p className="text-muted-foreground text-sm">
-                  Gerencie contas fixas, categorias, cartões e recorrências.
+                  Gerencie contas fixas, categorias e recorrências.
                 </p>
               </div>
               <div className="mt-4 flex items-center text-orange-600 font-medium text-sm">
@@ -158,11 +167,11 @@ const Menu = () => {
 
         {/* Dica Financeira */}
         <div className="mt-12 bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-slate-200 flex items-start gap-3 shadow-sm">
-           <CalendarClock className="w-5 h-5 text-slate-400 mt-0.5" />
+           <Lightbulb className="w-5 h-5 text-slate-400 mt-0.5" />
            <div>
              <h4 className="text-sm font-semibold text-slate-700">Dica Financeira</h4>
              <p className="text-sm text-slate-500">
-               Para gráficos mais precisos, categorize todas as suas despesas na aba "Configurações". Isso ajuda a identificar onde cortar gastos.
+               Para gráficos mais precisos, categorize todas as suas despesas na aba "Configurações".
              </p>
            </div>
         </div>

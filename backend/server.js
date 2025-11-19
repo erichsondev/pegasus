@@ -1,6 +1,6 @@
 /*
  * =================================================================
- * PEGASUS FINANCE 2.0 - SERVIDOR COM TODAS AS CORREÇÕES
+ * PEGASUS FINANCE 2.0
  * =================================================================
  */
 
@@ -8,7 +8,7 @@
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
-const jwt =require('jsonwebtoken');
+const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
@@ -82,9 +82,7 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
 
         // Para cada item fixo da sua matriz...
         for (const fixo of lancamentosFixos) {
-            
-            // ---> INÍCIO DA NOVA LÓGICA <---
-            // Antes de inserir, verifica se já existe uma transação com essa descrição neste mês para este usuário.
+            // Verifica se já existe uma transação com essa descrição neste mês
             const existeTransacaoQuery = `
                 SELECT 1 FROM transacoes 
                 WHERE descricao = $1 
@@ -101,7 +99,6 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
                 const insertQuery = 'INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id) VALUES ($1, $2, $3, \'previsto\', $4, $5, TRUE, $6)';
                 await db.query(insertQuery, [fixo.descricao, fixo.valor, dataLancamento, fixo.tipo, fixo.categoria_id, usuarioId]);
             }
-            // ---> FIM DA NOVA LÓGICA <---
         }
     } catch (error) {
         console.error(`Erro ao gerar lançamentos previstos para ${ano}-${mes} para o usuário ${usuarioId}:`, error);
@@ -163,7 +160,7 @@ const asyncHandler = fn => (req, res, next) => {
 
 // --- 6. ROTAS DA API (ORGANIZADAS) ---
 
-// Rota pública de "health check" para manter o servidor acordado
+// Rota pública de "health check"
 app.get('/api/status', (req, res) => {
     console.log('Servidor "pingado" para se manter ativo.');
     res.json({ status: 'ok', message: 'Servidor está ativo.' });
@@ -211,7 +208,7 @@ async function limparEGerarFuturos(dataReferencia, usuarioId) {
     // 1. Apaga todas as transações previstas futuras para este usuário.
     await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND data >= $1 AND usuario_id = $2", [dataReferencia, usuarioId]);
 
-    // 2. Recria os lançamentos para os próximos 12 meses para garantir consistência.
+    // 2. Recria os lançamentos para os próximos 12 meses
     const dataInicioObj = new Date(dataReferencia + 'T00:00:00');
     for (let i = 0; i < 12; i++) {
         let dataAlvo = new Date(dataInicioObj);
@@ -220,30 +217,21 @@ async function limparEGerarFuturos(dataReferencia, usuarioId) {
         let ano = dataAlvo.getFullYear();
         let mes = dataAlvo.getMonth() + 1;
         
-        // Antes de gerar, garante que o mês esteja limpo de previsões automáticas
         const mesFormatado = `${ano}-${String(mes).padStart(2, '0')}`;
         await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND TO_CHAR(data, 'YYYY-MM') = $1 AND usuario_id = $2", [mesFormatado, usuarioId]);
         await gerarLancamentosPrevistos(ano, mes, usuarioId);
     }
 }
 
-
+// --- CORREÇÃO 1: Rota Resumo sem "Re-geração Automática" ---
 rotasProtegidas.get('/resumo', asyncHandler(async (req, res) => {
     const { mes, ano } = req.query;
     const usuarioId = req.usuario.id;
-    const mesFormatado = `${ano}-${String(mes).padStart(2, '0')}`;
 
-    // CORREÇÃO: A rota agora só gera lançamentos se o mês estiver vazio, evitando apagar edições.
-    // Passo 1: Verifica se já existem lançamentos automáticos para o mês.
-    const existentesQuery = "SELECT 1 FROM transacoes WHERE gerado_automaticamente = TRUE AND TO_CHAR(data, 'YYYY-MM') = $1 AND usuario_id = $2 LIMIT 1";
-    const { rows: existentes } = await db.query(existentesQuery, [mesFormatado, usuarioId]);
+    // REMOVIDO: O bloco "if (existentes.length === 0)" foi deletado.
+    // A rota agora apenas CALCULA os saldos, sem tentar inserir dados se estiver vazio.
+    // Isso permite que você "limpe" o mês sem que o sistema coloque tudo de volta.
 
-    // Passo 2: Se NÃO existir NENHUM, então gere os lançamentos para o mês.
-    if (existentes.length === 0) {
-        await gerarLancamentosPrevistos(parseInt(ano), parseInt(mes), usuarioId);
-    }
-    
-    // Passo 3: Agora, simplesmente calcule e retorne o resumo. A rota não altera mais dados indevidamente.
     const resumoCompleto = await calcularResumoParaMes(parseInt(ano), parseInt(mes), usuarioId);
     res.json(resumoCompleto);
 }));
@@ -367,7 +355,7 @@ rotasProtegidas.get('/grafico/gastos-por-cartao', asyncHandler(async (req, res) 
     res.json(rows);
 }));
 
-// Rotas de Configurações (Matriz)
+// --- ROTAS DE CONFIGURAÇÕES (MATRIZ) ---
 rotasProtegidas.get('/lancamentos-fixos', asyncHandler(async (req, res) => {
     const sql = 'SELECT lf.*, c.nome as nome_categoria FROM lancamentos_fixos lf LEFT JOIN categorias c ON lf.categoria_id = c.id WHERE lf.usuario_id = $1 ORDER BY lf.tipo, lf.descricao';
     const { rows } = await db.query(sql, [req.usuario.id]);
@@ -382,6 +370,30 @@ rotasProtegidas.post('/lancamentos-fixos', asyncHandler(async (req, res) => {
     await limparEGerarFuturos(data_inicio, req.usuario.id);
     
     res.status(201).json({ id: rows[0].id });
+}));
+
+// --- CORREÇÃO 2: Nova Rota PUT para Editar Lançamentos Fixos ---
+rotasProtegidas.put('/lancamentos-fixos/:id', asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { descricao, valor, tipo, dia_do_mes, categoria_id, data_inicio, data_fim } = req.body;
+    const usuarioId = req.usuario.id;
+
+    // Atualiza o registro no banco
+    const sql = `
+        UPDATE lancamentos_fixos 
+        SET descricao = $1, valor = $2, tipo = $3, dia_do_mes = $4, categoria_id = $5, data_inicio = $6, data_fim = $7
+        WHERE id = $8 AND usuario_id = $9
+    `;
+    const { rowCount } = await db.query(sql, [
+        descricao, valor, tipo, dia_do_mes, categoria_id || null, data_inicio, data_fim || null, id, usuarioId
+    ]);
+
+    if (rowCount === 0) return res.status(404).json({ message: 'Item não encontrado.' });
+
+    // Refaz a agenda futura baseada na nova configuração
+    await limparEGerarFuturos(data_inicio, usuarioId);
+    
+    res.status(200).json({ message: 'Configuração atualizada!' });
 }));
 
 rotasProtegidas.delete('/lancamentos-fixos/:id', asyncHandler(async (req, res) => {

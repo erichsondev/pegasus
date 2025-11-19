@@ -30,7 +30,7 @@ import {
   type Resumo
 } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Trash2, Check, X, Calendar, TrendingUp, TrendingDown, Wallet, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Pencil, Trash2, Check, X, Calendar, TrendingUp, TrendingDown, Wallet, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
 
 const Acompanhamento = () => {
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
@@ -64,30 +64,22 @@ const Acompanhamento = () => {
     }
   }, [mesSelecionado]);
 
-  // Gera a lista de meses para o Dropdown (Dinâmico: +/- 6 meses do selecionado)
+  // Gera a lista de meses para o Dropdown
   const opcoesMeses = useMemo(() => {
     if (!mesSelecionado) return [];
-    
     const [ano, mes] = mesSelecionado.split('-').map(Number);
     const dataBase = new Date(ano, mes - 1, 1);
     const opcoes = [];
-
-    // Gera 6 meses para trás e 6 para frente para dar contexto
     for (let i = -6; i <= 6; i++) {
       const d = new Date(dataBase);
       d.setMonth(d.getMonth() + i);
-      
       const valor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      // Formata: "Novembro 2024"
       const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-      const labelCapitalizada = label.charAt(0).toUpperCase() + label.slice(1);
-      
-      opcoes.push({ value: valor, label: labelCapitalizada });
+      opcoes.push({ value: valor, label: label.charAt(0).toUpperCase() + label.slice(1) });
     }
     return opcoes;
   }, [mesSelecionado]);
 
-  // Funções auxiliares para botões de navegação rápida (setinhas)
   const navegarMes = (direcao: number) => {
     if (!mesSelecionado) return;
     const [ano, mes] = mesSelecionado.split('-').map(Number);
@@ -110,28 +102,19 @@ const Acompanhamento = () => {
       setCartoes(cartoesData);
 
       const resTransacoes = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes?ano=${ano}&mes=${mes}`, { headers });
-      if (resTransacoes.ok) {
-        setTransacoes(await resTransacoes.json());
-      }
+      if (resTransacoes.ok) setTransacoes(await resTransacoes.json());
 
       const resResumo = await fetch(`${import.meta.env.VITE_API_URL}/api/resumo?ano=${ano}&mes=${mes}`, { headers });
-      if (resResumo.ok) {
-        setResumo(await resResumo.json());
-      }
+      if (resResumo.ok) setResumo(await resResumo.json());
 
     } catch (error) {
       console.error(error);
-      toast({
-        title: "Erro ao carregar dados",
-        description: "Verifique sua conexão",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao carregar dados", variant: "destructive" });
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     const [ano, mes] = mesSelecionado.split('-');
     const dia = new Date().getDate();
     const dataFormatada = `${ano}-${mes}-${String(dia).padStart(2, '0')}`;
@@ -150,27 +133,38 @@ const Acompanhamento = () => {
       if (editandoId) {
         await editarTransacao(editandoId, transacao);
         setEditandoId(null);
-        toast({ title: "Transação editada com sucesso!" });
+        toast({ title: "Transação editada!" });
       } else {
         await adicionarTransacao(transacao);
-        toast({ title: "Transação adicionada com sucesso!" });
+        toast({ title: "Transação adicionada!" });
       }
-
-      setFormData({
-        descricao: "",
-        valor: "",
-        tipo: formData.tipo, 
-        categoria_id: "",
-        cartao_id: "",
-        efetivado: false
-      });
-      
+      setFormData({ descricao: "", valor: "", tipo: formData.tipo, categoria_id: "", cartao_id: "", efetivado: false });
       carregarDados();
     } catch (error) {
-      toast({
-        title: "Erro ao salvar transação",
-        variant: "destructive",
+      toast({ title: "Erro ao salvar", variant: "destructive" });
+    }
+  };
+
+  // --- NOVA FUNÇÃO: EFETIVAR RÁPIDO ---
+  const handleEfetivar = async (id: number) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes/${id}/efetivar`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` }
       });
+
+      if (response.ok) {
+        toast({ 
+          title: "Pagamento Efetivado!", 
+          className: "bg-green-600 text-white border-none" // Destaque visual
+        });
+        carregarDados(); // Recarrega a lista para atualizar saldos
+      } else {
+        throw new Error();
+      }
+    } catch (error) {
+      toast({ title: "Erro ao efetivar", variant: "destructive" });
     }
   };
 
@@ -191,7 +185,7 @@ const Acompanhamento = () => {
     try {
       await removerTransacao(id);
       carregarDados();
-      toast({ title: "Transação removida!" });
+      toast({ title: "Removido!" });
     } catch (error) {
       toast({ title: "Erro ao remover", variant: "destructive" });
     }
@@ -201,17 +195,14 @@ const Acompanhamento = () => {
     try {
       await Promise.all(transacoes.map(t => removerTransacao(t.id)));
       carregarDados();
-      toast({ title: "Mês limpo com sucesso!" });
+      toast({ title: "Mês limpo!" });
     } catch (error) {
-      toast({ title: "Erro ao limpar mês", variant: "destructive" });
+      toast({ title: "Erro ao limpar", variant: "destructive" });
     }
   };
 
   const formatarMoeda = (valor: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(valor);
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   };
 
   return (
@@ -220,7 +211,7 @@ const Acompanhamento = () => {
 
       <main className="container mx-auto px-4 md:px-6 py-8 animate-fade-in">
         
-        {/* Controle de Mês Personalizado */}
+        {/* Controle de Mês */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8 bg-white/70 backdrop-blur-md p-4 rounded-xl shadow-sm border border-white/50">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">Acompanhamento</h2>
@@ -228,15 +219,9 @@ const Acompanhamento = () => {
           </div>
           
           <div className="flex items-center bg-white p-1 rounded-lg shadow-sm border border-slate-100">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => navegarMes(-1)}
-              className="text-slate-400 hover:text-primary"
-            >
+            <Button variant="ghost" size="icon" onClick={() => navegarMes(-1)} className="text-slate-400 hover:text-primary">
               <ChevronLeft className="w-5 h-5" />
             </Button>
-
             <div className="flex items-center px-2">
               <Calendar className="w-4 h-4 text-primary mr-2" />
               <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
@@ -245,20 +230,12 @@ const Acompanhamento = () => {
                 </SelectTrigger>
                 <SelectContent className="max-h-[300px]">
                   {opcoesMeses.map((opcao) => (
-                    <SelectItem key={opcao.value} value={opcao.value}>
-                      {opcao.label}
-                    </SelectItem>
+                    <SelectItem key={opcao.value} value={opcao.value}>{opcao.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => navegarMes(1)}
-              className="text-slate-400 hover:text-primary"
-            >
+            <Button variant="ghost" size="icon" onClick={() => navegarMes(1)} className="text-slate-400 hover:text-primary">
               <ChevronRight className="w-5 h-5" />
             </Button>
           </div>
@@ -274,7 +251,6 @@ const Acompanhamento = () => {
           <TabsContent value="geral">
             {resumo && (
               <div className="space-y-6">
-                {/* Realizado */}
                 <div>
                   <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
                     <Wallet className="w-4 h-4" /> Fluxo de Caixa (Realizado)
@@ -301,7 +277,6 @@ const Acompanhamento = () => {
                   </div>
                 </div>
 
-                {/* Previsto */}
                 <div>
                   <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" /> Previsão (Agendado)
@@ -349,27 +324,12 @@ const Acompanhamento = () => {
                     <form onSubmit={handleSubmit} className="space-y-4">
                       <div>
                         <Label className="text-xs">Descrição</Label>
-                        <Input
-                          value={formData.descricao}
-                          onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                          required
-                          placeholder="Ex: Supermercado"
-                          className="mt-1"
-                        />
+                        <Input value={formData.descricao} onChange={(e) => setFormData({ ...formData, descricao: e.target.value })} required placeholder="Ex: Supermercado" className="mt-1" />
                       </div>
-
                       <div>
                         <Label className="text-xs">Valor (R$)</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={formData.valor}
-                          onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
-                          required
-                          className="mt-1"
-                        />
+                        <Input type="number" step="0.01" value={formData.valor} onChange={(e) => setFormData({ ...formData, valor: e.target.value })} required className="mt-1" />
                       </div>
-
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs">Tipo</Label>
@@ -386,52 +346,29 @@ const Acompanhamento = () => {
                           <Select value={formData.categoria_id} onValueChange={(v) => setFormData({ ...formData, categoria_id: v })}>
                             <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
                             <SelectContent>
-                              {categorias.map(cat => (
-                                <SelectItem key={cat.id} value={cat.id.toString()}>{cat.nome}</SelectItem>
-                              ))}
+                              {categorias.map(cat => (<SelectItem key={cat.id} value={cat.id.toString()}>{cat.nome}</SelectItem>))}
                             </SelectContent>
                           </Select>
                         </div>
                       </div>
-
                       {formData.tipo === "despesa" && (
                         <div>
                           <Label className="text-xs">Cartão (Opcional)</Label>
                           <Select value={formData.cartao_id} onValueChange={(v) => setFormData({ ...formData, cartao_id: v })}>
                             <SelectTrigger className="mt-1"><SelectValue placeholder="Nenhum" /></SelectTrigger>
                             <SelectContent>
-                              {cartoes.map(cartao => (
-                                <SelectItem key={cartao.id} value={cartao.id.toString()}>{cartao.nome}</SelectItem>
-                              ))}
+                              {cartoes.map(cartao => (<SelectItem key={cartao.id} value={cartao.id.toString()}>{cartao.nome}</SelectItem>))}
                             </SelectContent>
                           </Select>
                         </div>
                       )}
-
                       <div className="flex items-center gap-2 py-2">
-                        <input
-                          type="checkbox"
-                          id="efetivado"
-                          checked={formData.efetivado}
-                          onChange={(e) => setFormData({ ...formData, efetivado: e.target.checked })}
-                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <Label htmlFor="efetivado" className="cursor-pointer font-normal text-slate-700">
-                          Já foi pago/recebido? (Efetivado)
-                        </Label>
+                        <input type="checkbox" id="efetivado" checked={formData.efetivado} onChange={(e) => setFormData({ ...formData, efetivado: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                        <Label htmlFor="efetivado" className="cursor-pointer font-normal text-slate-700">Já foi pago/recebido? (Efetivado)</Label>
                       </div>
-
                       <div className="flex gap-2 pt-2">
                         {editandoId && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                              setEditandoId(null);
-                              setFormData({ descricao: "", valor: "", tipo: "receita", categoria_id: "", cartao_id: "", efetivado: false });
-                            }}
-                            className="flex-1"
-                          >
+                          <Button type="button" variant="outline" onClick={() => { setEditandoId(null); setFormData({ descricao: "", valor: "", tipo: "receita", categoria_id: "", cartao_id: "", efetivado: false }); }} className="flex-1">
                             <X className="w-4 h-4 mr-2" /> Cancelar
                           </Button>
                         )}
@@ -458,9 +395,7 @@ const Acompanhamento = () => {
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Cuidado Absoluto!</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Isso apagará <b>todas</b> as transações deste mês.
-                        </AlertDialogDescription>
+                        <AlertDialogDescription>Isso apagará <b>todas</b> as transações deste mês.</AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
@@ -478,16 +413,10 @@ const Acompanhamento = () => {
                     </div>
                   ) : (
                     transacoes.map(transacao => (
-                      <div 
-                        key={transacao.id} 
-                        className={`group flex items-center justify-between p-4 bg-white/80 border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'opacity-75 bg-slate-50/50' : ''}`}
-                      >
+                      <div key={transacao.id} className={`group flex items-center justify-between p-4 bg-white/80 border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'opacity-75 bg-slate-50/50' : ''}`}>
                         <div className="flex items-center gap-4 overflow-hidden">
                           <div className={`p-2 rounded-full ${transacao.tipo === 'receita' ? 'bg-green-100' : 'bg-red-100'}`}>
-                            {transacao.tipo === 'receita' 
-                              ? <TrendingUp className="w-5 h-5 text-green-600" /> 
-                              : <TrendingDown className="w-5 h-5 text-red-600" />
-                            }
+                            {transacao.tipo === 'receita' ? <TrendingUp className="w-5 h-5 text-green-600" /> : <TrendingDown className="w-5 h-5 text-red-600" />}
                           </div>
                           <div className="min-w-0">
                             <p className="font-semibold text-slate-800 truncate">{transacao.descricao}</p>
@@ -509,6 +438,19 @@ const Acompanhamento = () => {
                             {transacao.tipo === 'despesa' ? '-' : '+'}{formatarMoeda(transacao.valor)}
                           </p>
                           <div className="flex justify-end gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {/* BOTÃO NOVO DE EFETIVAR */}
+                            {transacao.status === 'previsto' && (
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                className="h-7 w-7 text-slate-400 hover:text-green-600 hover:bg-green-50" 
+                                onClick={() => handleEfetivar(transacao.id)}
+                                title="Efetivar Pagamento/Recebimento"
+                              >
+                                <CheckCircle2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                            
                             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEditar(transacao)}>
                               <Pencil className="w-3.5 h-3.5 text-slate-400 hover:text-blue-600" />
                             </Button>

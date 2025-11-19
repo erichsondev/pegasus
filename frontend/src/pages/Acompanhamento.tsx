@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -30,7 +30,7 @@ import {
   type Resumo
 } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Trash2, Check, X, Calendar, TrendingUp, TrendingDown, Wallet, AlertCircle } from "lucide-react";
+import { Pencil, Trash2, Check, X, Calendar, TrendingUp, TrendingDown, Wallet, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 
 const Acompanhamento = () => {
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
@@ -64,13 +64,44 @@ const Acompanhamento = () => {
     }
   }, [mesSelecionado]);
 
+  // Gera a lista de meses para o Dropdown (Dinâmico: +/- 6 meses do selecionado)
+  const opcoesMeses = useMemo(() => {
+    if (!mesSelecionado) return [];
+    
+    const [ano, mes] = mesSelecionado.split('-').map(Number);
+    const dataBase = new Date(ano, mes - 1, 1);
+    const opcoes = [];
+
+    // Gera 6 meses para trás e 6 para frente para dar contexto
+    for (let i = -6; i <= 6; i++) {
+      const d = new Date(dataBase);
+      d.setMonth(d.getMonth() + i);
+      
+      const valor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      // Formata: "Novembro 2024"
+      const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      const labelCapitalizada = label.charAt(0).toUpperCase() + label.slice(1);
+      
+      opcoes.push({ value: valor, label: labelCapitalizada });
+    }
+    return opcoes;
+  }, [mesSelecionado]);
+
+  // Funções auxiliares para botões de navegação rápida (setinhas)
+  const navegarMes = (direcao: number) => {
+    if (!mesSelecionado) return;
+    const [ano, mes] = mesSelecionado.split('-').map(Number);
+    const novaData = new Date(ano, mes - 1 + direcao, 1);
+    const novoValor = `${novaData.getFullYear()}-${String(novaData.getMonth() + 1).padStart(2, '0')}`;
+    setMesSelecionado(novoValor);
+  };
+
   const carregarDados = async () => {
     const [ano, mes] = mesSelecionado.split('-').map(Number);
     const token = localStorage.getItem("token");
     const headers = { Authorization: `Bearer ${token}` };
     
     try {
-      // 1. Busca Categorias e Cartões (Auxiliares)
       const [categoriasData, cartoesData] = await Promise.all([
         obterCategorias(),
         obterCartoes()
@@ -78,13 +109,11 @@ const Acompanhamento = () => {
       setCategorias(categoriasData);
       setCartoes(cartoesData);
 
-      // 2. Busca Transações DO MÊS SELECIONADO (Fetch Direto para garantir o filtro)
       const resTransacoes = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes?ano=${ano}&mes=${mes}`, { headers });
       if (resTransacoes.ok) {
         setTransacoes(await resTransacoes.json());
       }
 
-      // 3. Busca Resumo DO MÊS SELECIONADO (Fetch Direto)
       const resResumo = await fetch(`${import.meta.env.VITE_API_URL}/api/resumo?ano=${ano}&mes=${mes}`, { headers });
       if (resResumo.ok) {
         setResumo(await resResumo.json());
@@ -105,7 +134,6 @@ const Acompanhamento = () => {
     
     const [ano, mes] = mesSelecionado.split('-');
     const dia = new Date().getDate();
-    // Usa o ano/mês selecionado para criar a data, mas mantém o dia atual (ou 01 se preferir)
     const dataFormatada = `${ano}-${mes}-${String(dia).padStart(2, '0')}`;
     
     const transacao = {
@@ -128,7 +156,6 @@ const Acompanhamento = () => {
         toast({ title: "Transação adicionada com sucesso!" });
       }
 
-      // Limpa o formulário mas mantém o tipo para facilitar lançamentos em sequência
       setFormData({
         descricao: "",
         valor: "",
@@ -188,26 +215,52 @@ const Acompanhamento = () => {
   };
 
   return (
-    // REMOVIDO bg-slate-50 para o fundo azulzinho (gradient body) aparecer
     <div className="min-h-screen pb-20">
       <Header showBack={true} backPath="/menu" />
 
       <main className="container mx-auto px-4 md:px-6 py-8 animate-fade-in">
         
-        {/* Controle de Mês */}
+        {/* Controle de Mês Personalizado */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8 bg-white/70 backdrop-blur-md p-4 rounded-xl shadow-sm border border-white/50">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">Acompanhamento</h2>
             <p className="text-slate-600 text-sm">Controle detalhado de entradas e saídas.</p>
           </div>
-          <div className="flex items-center gap-2 bg-white p-1 rounded-lg shadow-sm border border-slate-100">
-            <Calendar className="w-5 h-5 text-primary ml-2" />
-            <Input
-              type="month"
-              value={mesSelecionado}
-              onChange={(e) => setMesSelecionado(e.target.value)}
-              className="border-none bg-transparent shadow-none focus-visible:ring-0 w-40 font-medium text-slate-700 cursor-pointer"
-            />
+          
+          <div className="flex items-center bg-white p-1 rounded-lg shadow-sm border border-slate-100">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => navegarMes(-1)}
+              className="text-slate-400 hover:text-primary"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </Button>
+
+            <div className="flex items-center px-2">
+              <Calendar className="w-4 h-4 text-primary mr-2" />
+              <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
+                <SelectTrigger className="w-[180px] border-none bg-transparent shadow-none focus:ring-0 font-bold text-slate-700 text-center">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {opcoesMeses.map((opcao) => (
+                    <SelectItem key={opcao.value} value={opcao.value}>
+                      {opcao.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => navegarMes(1)}
+              className="text-slate-400 hover:text-primary"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </Button>
           </div>
         </div>
 

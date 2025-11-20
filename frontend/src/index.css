@@ -42,7 +42,6 @@
     --input: 214 32% 91%;
     --ring: 211 100% 50%;
 
-    /* Bordas mais modernas */
     --radius: 0.75rem;
 
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
@@ -62,7 +61,7 @@
   .dark {
     --background: 222 47% 5%;
     --foreground: 210 40% 98%;
-    /* ... variáveis dark mode ... */
+    /* ... (variáveis dark mode se necessário) ... */
   }
 }
 
@@ -72,10 +71,14 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    /* ADICIONADO: cursor-default 
+       Isso faz com que o mouse seja sempre a setinha, tirando a sensação de "texto editável" 
+       do site todo. Inputs continuarão funcionando normalmente.
+    */
+    @apply bg-background text-foreground cursor-default;
+    
     font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     
-    /* Fundo Gradiente Sutil */
     background-image: radial-gradient(at 0% 0%, hsla(215, 90%, 95%, 1) 0px, transparent 50%),
                       radial-gradient(at 100% 0%, hsla(180, 80%, 95%, 1) 0px, transparent 50%),
                       radial-gradient(at 100% 100%, hsla(260, 80%, 97%, 1) 0px, transparent 50%);
@@ -102,5 +105,17 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
   }
 }

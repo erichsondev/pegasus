@@ -61,7 +61,7 @@
   .dark {
     --background: 222 47% 5%;
     --foreground: 210 40% 98%;
-    /* ... (variáveis dark mode se necessário) ... */
+    /* ... variáveis dark mode ... */
   }
 }
 
@@ -71,19 +71,25 @@
   }
 
   body {
-    /* ADICIONADO: cursor-default 
-       Isso faz com que o mouse seja sempre a setinha, tirando a sensação de "texto editável" 
-       do site todo. Inputs continuarão funcionando normalmente.
+    /* MUDANÇA CRÍTICA AQUI:
+       cursor-default: Força a setinha do mouse em tudo.
+       select-none: IMPEDE que o usuário selecione/arraste textos (efeito de app nativo).
     */
-    @apply bg-background text-foreground cursor-default;
+    @apply bg-background text-foreground cursor-default select-none;
     
     font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     
+    /* Fundo com profundidade */
     background-image: radial-gradient(at 0% 0%, hsla(215, 90%, 95%, 1) 0px, transparent 50%),
                       radial-gradient(at 100% 0%, hsla(180, 80%, 95%, 1) 0px, transparent 50%),
                       radial-gradient(at 100% 100%, hsla(260, 80%, 97%, 1) 0px, transparent 50%);
     background-attachment: fixed;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Garante que inputs continuem permitindo digitação e seleção interna */
+  input, textarea {
+    @apply select-text cursor-text;
   }
 }
 
@@ -106,7 +112,7 @@
       transform: translateY(0);
     }
   }
-
+  
   /* Scrollbar */
   ::-webkit-scrollbar {
     width: 6px;

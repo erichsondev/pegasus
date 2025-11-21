@@ -1,6 +1,6 @@
 /*
  * =================================================================
- * PEGASUS FINANCE 2.0
+ * PEGASUS FINANCE 2.0 - SERVIDOR COM LISTA COMPLETA DE USUÁRIOS
  * =================================================================
  */
 
@@ -10,8 +10,6 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
-const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const app = express();
@@ -39,7 +37,7 @@ db.connect()
     });
 
 
-// --- 3. INICIALIZAÇÃO DO BANCO DE DADOS (CRIAÇÃO DE TABELAS) ---
+// --- 3. INICIALIZAÇÃO DO BANCO DE DADOS ---
 const inicializarBancoDeDados = async () => {
     const queries = [
         `CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, nome TEXT NOT NULL, email TEXT NOT NULL UNIQUE, senha_hash TEXT NOT NULL);`,
@@ -54,7 +52,7 @@ const inicializarBancoDeDados = async () => {
         for (const query of queries) {
             await db.query(query);
         }
-        console.log('Tabelas do Pegasus 2.0 sincronizadas com sucesso.');
+        console.log('Tabelas do Pegasus 2.0 sincronizadas.');
     } catch (err) {
         console.error('Erro ao sincronizar tabelas:', err);
     }
@@ -80,9 +78,7 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
         
         if (lancamentosFixos.length === 0) return;
 
-        // Para cada item fixo da sua matriz...
         for (const fixo of lancamentosFixos) {
-            // Verifica se já existe uma transação com essa descrição neste mês
             const existeTransacaoQuery = `
                 SELECT 1 FROM transacoes 
                 WHERE descricao = $1 
@@ -92,7 +88,6 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
             `;
             const { rows: transacaoExistente } = await db.query(existeTransacaoQuery, [fixo.descricao, usuarioId, `${ano}-${mesFormatado}`]);
 
-            // Se a transação NÃO existir, então pode criar.
             if (transacaoExistente.length === 0) {
                 const dia = Math.min(fixo.dia_do_mes, ultimoDiaDoMes);
                 const dataLancamento = `${ano}-${mesFormatado}-${String(dia).padStart(2, '0')}`;
@@ -101,7 +96,7 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
             }
         }
     } catch (error) {
-        console.error(`Erro ao gerar lançamentos previstos para ${ano}-${mes} para o usuário ${usuarioId}:`, error);
+        console.error(`Erro ao gerar lançamentos:`, error);
     }
 }
 
@@ -144,10 +139,10 @@ async function calcularResumoParaMes(ano, mes, usuarioId, profundidade = 0) {
 const autenticarToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    if (token == null) return res.status(401).json({ message: 'Token de autenticação não fornecido.' });
+    if (token == null) return res.status(401).json({ message: 'Token não fornecido.' });
 
     jwt.verify(token, process.env.JWT_SECRET, (err, usuario) => {
-        if (err) return res.status(403).json({ message: 'Token inválido ou expirado.' });
+        if (err) return res.status(403).json({ message: 'Token inválido.' });
         req.usuario = usuario;
         next();
     });
@@ -158,58 +153,17 @@ const asyncHandler = fn => (req, res, next) => {
 };
 
 
-// --- 6. ROTAS DA API (ORGANIZADAS) ---
-
-// Rota pública de "health check"
-app.get('/api/status', (req, res) => {
-    console.log('Servidor "pingado" para se manter ativo.');
-    res.json({ status: 'ok', message: 'Servidor está ativo.' });
-});
-
-// 6.1 Roteador para Rotas Públicas
-const rotasPublicas = express.Router();
-
-rotasPublicas.post('/usuarios/cadastro', asyncHandler(async (req, res) => {
-    const { nome, email, senha } = req.body;
-    if (!nome || !email || !senha) return res.status(400).json({ message: 'Todos os campos são obrigatórios.' });
-    const { rows } = await db.query('SELECT id FROM usuarios WHERE email = $1', [email]);
-    if (rows.length > 0) return res.status(409).json({ message: 'Este e-mail já está em uso.' });
-    const senha_hash = await bcrypt.hash(senha, 10);
-    const result = await db.query('INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3) RETURNING id', [nome, email, senha_hash]);
-    res.status(201).json({ id: result.rows[0].id, nome, email });
-}));
-
-rotasPublicas.post('/usuarios/login', asyncHandler(async (req, res) => {
-    const { email, senha } = req.body;
-    if (!email || !senha) return res.status(400).json({ message: 'Email e senha são obrigatórios.' });
-    const { rows } = await db.query('SELECT * FROM usuarios WHERE email = $1', [email]);
-    const usuario = rows[0];
-    if (!usuario || !(await bcrypt.compare(senha, usuario.senha_hash))) {
-        return res.status(401).json({ message: 'Credenciais inválidas.' });
-    }
-    const token = jwt.sign({ id: usuario.id, nome: usuario.nome }, process.env.JWT_SECRET, { expiresIn: '8h' });
-    res.json({ token, usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email } });
-}));
-
-rotasPublicas.post('/usuarios/recuperar-senha', asyncHandler(async (req, res) => {
-    // Código de recuperação de senha inalterado
-}));
-
-rotasPublicas.post('/usuarios/resetar-senha', asyncHandler(async (req, res) => {
-    // Código de reset de senha inalterado
-}));
-
-// 6.2 Roteador para Rotas Protegidas
-const rotasProtegidas = express.Router();
-rotasProtegidas.use(autenticarToken);
-
-// Função auxiliar para limpar e gerar lançamentos futuros de forma segura
+// --- 6. FUNÇÃO DE LIMPEZA E REGENERAÇÃO ---
 async function limparEGerarFuturos(dataReferencia, usuarioId) {
-    // 1. Apaga todas as transações previstas futuras para este usuário.
-    await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND data >= $1 AND usuario_id = $2", [dataReferencia, usuarioId]);
+    let dataRefString = dataReferencia;
+    if (dataReferencia instanceof Date) {
+        dataRefString = dataReferencia.toISOString().split('T')[0];
+    }
 
-    // 2. Recria os lançamentos para os próximos 60 meses
-    const dataInicioObj = new Date(dataReferencia + 'T00:00:00');
+    await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND data >= $1 AND usuario_id = $2", [dataRefString, usuarioId]);
+
+    const dataInicioObj = new Date(dataRefString + 'T00:00:00');
+    
     for (let i = 0; i < 60; i++) {
         let dataAlvo = new Date(dataInicioObj);
         dataAlvo.setMonth(dataAlvo.getMonth() + i);
@@ -219,20 +173,63 @@ async function limparEGerarFuturos(dataReferencia, usuarioId) {
         
         const mesFormatado = `${ano}-${String(mes).padStart(2, '0')}`;
         await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND TO_CHAR(data, 'YYYY-MM') = $1 AND usuario_id = $2", [mesFormatado, usuarioId]);
+        
         await gerarLancamentosPrevistos(ano, mes, usuarioId);
     }
 }
 
-// --- CORREÇÃO 1: Rota Resumo sem "Re-geração Automática" ---
+
+// --- 7. ROTAS DA API ---
+
+// Health Check
+app.get('/api/status', (req, res) => res.json({ status: 'ok' }));
+
+// ===> ROTA ADMIN: LISTA DETALHADA DE USUÁRIOS <===
+// Agora retorna ID, Nome e E-mail de todos os cadastrados
+app.get('/api/admin/stats', async (req, res) => {
+    try {
+        const { rows } = await db.query('SELECT id, nome, email FROM usuarios ORDER BY id ASC');
+        
+        res.json({ 
+            total_usuarios: rows.length,
+            lista_usuarios: rows 
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao buscar usuários' });
+    }
+});
+
+// ROTAS PÚBLICAS
+const rotasPublicas = express.Router();
+
+rotasPublicas.post('/usuarios/cadastro', asyncHandler(async (req, res) => {
+    const { nome, email, senha } = req.body;
+    if (!nome || !email || !senha) return res.status(400).json({ message: 'Campos obrigatórios.' });
+    const { rows } = await db.query('SELECT id FROM usuarios WHERE email = $1', [email]);
+    if (rows.length > 0) return res.status(409).json({ message: 'E-mail já em uso.' });
+    const senha_hash = await bcrypt.hash(senha, 10);
+    const result = await db.query('INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3) RETURNING id', [nome, email, senha_hash]);
+    res.status(201).json({ id: result.rows[0].id, nome, email });
+}));
+
+rotasPublicas.post('/usuarios/login', asyncHandler(async (req, res) => {
+    const { email, senha } = req.body;
+    const { rows } = await db.query('SELECT * FROM usuarios WHERE email = $1', [email]);
+    const usuario = rows[0];
+    if (!usuario || !(await bcrypt.compare(senha, usuario.senha_hash))) {
+        return res.status(401).json({ message: 'Credenciais inválidas.' });
+    }
+    const token = jwt.sign({ id: usuario.id, nome: usuario.nome }, process.env.JWT_SECRET, { expiresIn: '8h' });
+    res.json({ token, usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email } });
+}));
+
+// ROTAS PROTEGIDAS
+const rotasProtegidas = express.Router();
+rotasProtegidas.use(autenticarToken);
+
 rotasProtegidas.get('/resumo', asyncHandler(async (req, res) => {
     const { mes, ano } = req.query;
-    const usuarioId = req.usuario.id;
-
-    // REMOVIDO: O bloco "if (existentes.length === 0)" foi deletado.
-    // A rota agora apenas CALCULA os saldos, sem tentar inserir dados se estiver vazio.
-    // Isso permite que você "limpe" o mês sem que o sistema coloque tudo de volta.
-
-    const resumoCompleto = await calcularResumoParaMes(parseInt(ano), parseInt(mes), usuarioId);
+    const resumoCompleto = await calcularResumoParaMes(parseInt(ano), parseInt(mes), req.usuario.id);
     res.json(resumoCompleto);
 }));
 
@@ -258,104 +255,18 @@ rotasProtegidas.delete('/transacoes/:id', asyncHandler(async (req, res) => {
 rotasProtegidas.put('/transacoes/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { descricao, valor, data, status, categoria_id, cartao_id } = req.body;
-    const usuarioId = req.usuario.id;
-    const sql = `
-        UPDATE transacoes 
-        SET descricao = $1, valor = $2, data = $3, categoria_id = $4, cartao_id = $5, status = $6
-        WHERE id = $7 AND usuario_id = $8
-        RETURNING id;
-    `;
-    const { rowCount } = await db.query(sql, [
-        descricao, valor, data, categoria_id || null, cartao_id || null, status, id, usuarioId
-    ]);
-    if (rowCount === 0) {
-        return res.status(404).json({ message: 'Transação não encontrada ou não pertence ao usuário.' });
-    }
-    res.status(200).json({ message: 'Transação atualizada com sucesso!' });
+    const sql = `UPDATE transacoes SET descricao = $1, valor = $2, data = $3, categoria_id = $4, cartao_id = $5, status = $6 WHERE id = $7 AND usuario_id = $8`;
+    await db.query(sql, [descricao, valor, data, categoria_id || null, cartao_id || null, status, id, req.usuario.id]);
+    res.status(200).json({ message: 'Atualizado' });
 }));
 
 rotasProtegidas.put('/transacoes/:id/efetivar', asyncHandler(async (req, res) => {
     await db.query('UPDATE transacoes SET status = \'efetivado\' WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
-    res.status(200).json({ message: 'Transação efetivada!' });
+    res.status(200).json({ message: 'Efetivado!' });
 }));
 
-rotasProtegidas.put('/transacoes/:id/prever', asyncHandler(async (req, res) => {
-    await db.query('UPDATE transacoes SET status = \'previsto\' WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
-    res.status(200).json({ message: 'Transação revertida para previsto!' });
-}));
+// --- ROTAS DA MATRIZ (LANÇAMENTOS FIXOS) ---
 
-// Rotas de Gráficos (inalteradas)
-rotasProtegidas.get('/grafico/evolucao-patrimonial', asyncHandler(async (req, res) => {
-    const { inicio, fim } = req.query;
-    const usuarioId = req.usuario.id;
-    const dataInicioObj = new Date(inicio + 'T00:00:00');
-    let anoAnterior = dataInicioObj.getFullYear();
-    let mesAnterior = dataInicioObj.getMonth();
-    if (mesAnterior === 0) {
-        mesAnterior = 12;
-        anoAnterior--;
-    }
-    const resumoAnterior = await calcularResumoParaMes(anoAnterior, mesAnterior, usuarioId);
-    let saldoAcumulado = resumoAnterior.saldoFinalProjetado;
-
-    const sql = `
-        SELECT 
-            TO_CHAR(data, 'YYYY-MM') AS mes,
-            SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END) AS receitas,
-            SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE 0 END) AS despesas
-        FROM transacoes 
-        WHERE usuario_id = $1 AND data BETWEEN $2 AND $3
-        GROUP BY mes 
-        ORDER BY mes;
-    `;
-    const { rows: totaisMensais } = await db.query(sql, [usuarioId, inicio, fim]);
-
-    const dadosGrafico = totaisMensais.map(item => {
-        saldoAcumulado += parseFloat(item.receitas) - parseFloat(item.despesas);
-        return {
-            mes: item.mes,
-            receitas: parseFloat(item.receitas),
-            despesas: parseFloat(item.despesas),
-            saldo_acumulado: saldoAcumulado
-        };
-    });
-    res.json(dadosGrafico);
-}));
-
-rotasProtegidas.get('/grafico/despesas-por-categoria', asyncHandler(async (req, res) => {
-    const { inicio, fim } = req.query;
-    const sql = `
-        SELECT c.nome AS categoria, SUM(t.valor) AS total 
-        FROM transacoes t JOIN categorias c ON t.categoria_id = c.id 
-        WHERE t.usuario_id = $1 
-        AND t.data BETWEEN $2 AND $3 
-        AND t.tipo = 'despesa' 
-        AND c.analitico = TRUE 
-        GROUP BY c.nome 
-        HAVING SUM(t.valor) > 0 
-        ORDER BY total DESC;
-    `;
-    const { rows } = await db.query(sql, [req.usuario.id, inicio, fim]);
-    res.json(rows);
-}));
-
-rotasProtegidas.get('/grafico/gastos-por-cartao', asyncHandler(async (req, res) => {
-    const { inicio, fim } = req.query;
-    const sql = `
-        SELECT cc.nome AS cartao, SUM(t.valor) AS total 
-        FROM transacoes t JOIN cartoes_de_credito cc ON t.cartao_id = cc.id 
-        WHERE t.data BETWEEN $1 AND $2 
-        AND t.tipo = 'despesa'
-        AND t.usuario_id = $3 
-        GROUP BY cc.nome 
-        HAVING SUM(t.valor) > 0 
-        ORDER BY total DESC;
-    `;
-    const { rows } = await db.query(sql, [inicio, fim, req.usuario.id]);
-    res.json(rows);
-}));
-
-// --- ROTAS DE CONFIGURAÇÕES (MATRIZ) ---
 rotasProtegidas.get('/lancamentos-fixos', asyncHandler(async (req, res) => {
     const sql = 'SELECT lf.*, c.nome as nome_categoria FROM lancamentos_fixos lf LEFT JOIN categorias c ON lf.categoria_id = c.id WHERE lf.usuario_id = $1 ORDER BY lf.tipo, lf.descricao';
     const { rows } = await db.query(sql, [req.usuario.id]);
@@ -372,28 +283,15 @@ rotasProtegidas.post('/lancamentos-fixos', asyncHandler(async (req, res) => {
     res.status(201).json({ id: rows[0].id });
 }));
 
-// --- CORREÇÃO 2: Nova Rota PUT para Editar Lançamentos Fixos ---
 rotasProtegidas.put('/lancamentos-fixos/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { descricao, valor, tipo, dia_do_mes, categoria_id, data_inicio, data_fim } = req.body;
-    const usuarioId = req.usuario.id;
-
-    // Atualiza o registro no banco
-    const sql = `
-        UPDATE lancamentos_fixos 
-        SET descricao = $1, valor = $2, tipo = $3, dia_do_mes = $4, categoria_id = $5, data_inicio = $6, data_fim = $7
-        WHERE id = $8 AND usuario_id = $9
-    `;
-    const { rowCount } = await db.query(sql, [
-        descricao, valor, tipo, dia_do_mes, categoria_id || null, data_inicio, data_fim || null, id, usuarioId
-    ]);
-
-    if (rowCount === 0) return res.status(404).json({ message: 'Item não encontrado.' });
-
-    // Refaz a agenda futura baseada na nova configuração
-    await limparEGerarFuturos(data_inicio, usuarioId);
     
-    res.status(200).json({ message: 'Configuração atualizada!' });
+    await db.query(`UPDATE lancamentos_fixos SET descricao=$1, valor=$2, tipo=$3, dia_do_mes=$4, categoria_id=$5, data_inicio=$6, data_fim=$7 WHERE id=$8 AND usuario_id=$9`,
+        [descricao, valor, tipo, dia_do_mes, categoria_id || null, data_inicio, data_fim || null, id, req.usuario.id]);
+
+    await limparEGerarFuturos(data_inicio, req.usuario.id);
+    res.status(200).json({ message: 'Atualizado' });
 }));
 
 rotasProtegidas.delete('/lancamentos-fixos/:id', asyncHandler(async (req, res) => {
@@ -403,56 +301,52 @@ rotasProtegidas.delete('/lancamentos-fixos/:id', asyncHandler(async (req, res) =
     const { rows: lancamentoInfo } = await db.query('SELECT data_inicio FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
     if (lancamentoInfo.length === 0) return res.status(404).send();
     
-    const data_inicio = lancamentoInfo[0].data_inicio;
+    const data_inicio = lancamentoInfo[0].data_inicio; 
+    
     await db.query('DELETE FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
+    
     await limparEGerarFuturos(data_inicio, usuarioId);
 
     res.status(204).send();
 }));
 
+// --- RESTANTE DAS ROTAS ---
 rotasProtegidas.get('/categorias', asyncHandler(async (req, res) => {
     const { rows } = await db.query('SELECT * FROM categorias WHERE usuario_id = $1 ORDER BY nome', [req.usuario.id]);
     res.json(rows);
 }));
-
 rotasProtegidas.post('/categorias', asyncHandler(async (req, res) => {
     const { nome, analitico } = req.body;
-    const sql = 'INSERT INTO categorias (nome, usuario_id, analitico) VALUES ($1, $2, $3) RETURNING *';
-    const { rows } = await db.query(sql, [nome, req.usuario.id, analitico]);
+    const { rows } = await db.query('INSERT INTO categorias (nome, usuario_id, analitico) VALUES ($1, $2, $3) RETURNING *', [nome, req.usuario.id, analitico]);
     res.status(201).json(rows[0]);
 }));
-
 rotasProtegidas.delete('/categorias/:id', asyncHandler(async (req, res) => {
     await db.query('DELETE FROM categorias WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
     res.status(204).send();
 }));
-
 rotasProtegidas.get('/cartoes', asyncHandler(async (req, res) => {
     const { rows } = await db.query('SELECT * FROM cartoes_de_credito WHERE usuario_id = $1 ORDER BY nome', [req.usuario.id]);
     res.json(rows);
 }));
-
 rotasProtegidas.post('/cartoes', asyncHandler(async (req, res) => {
     const { nome } = req.body;
     const { rows } = await db.query('INSERT INTO cartoes_de_credito (nome, usuario_id) VALUES ($1, $2) RETURNING id, nome', [nome, req.usuario.id]);
     res.status(201).json(rows[0]);
 }));
-
 rotasProtegidas.delete('/cartoes/:id', asyncHandler(async (req, res) => {
     await db.query('DELETE FROM cartoes_de_credito WHERE id = $1 AND usuario_id = $2', [req.params.id, req.usuario.id]);
     res.status(204).send();
 }));
 
-// 6.3 Conexão dos Roteadores com a Aplicação Principal
+// Conexão das rotas
 app.use('/api', rotasPublicas);
 app.use('/api', rotasProtegidas);
 
-
-// --- 7. MIDDLEWARE DE TRATAMENTO DE ERROS ---
 app.use((err, req, res, next) => {
-    console.error('--- ERRO CAPTURADO PELO HANDLER CENTRAL ---');
-    console.error('Rota:', req.method, req.originalUrl);
     console.error(err.stack);
-    console.error('-----------------------------------------');
-    res.status(500).json({ message: 'Ocorreu um erro interno no servidor.' });
+    res.status(500).json({ message: 'Erro interno.' });
+});
+
+app.listen(PORT, () => {
+    console.log(`Servidor Pegasus 2.0 rodando na porta ${PORT}`);
 });

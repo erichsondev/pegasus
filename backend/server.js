@@ -462,3 +462,19 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
     console.log(`Servidor Pegasus 2.0 decolando na porta ${PORT}`);
 });
+
+// Rota Admin Secreta (Temporária)
+app.get('/api/admin/stats', async (req, res) => {
+    try {
+        // Conta quantos usuários existem na tabela 'usuarios'
+        const { rows } = await db.query('SELECT COUNT(*) FROM usuarios');
+        const totalUsuarios = rows[0].count;
+        
+        res.json({ 
+            total_usuarios: parseInt(totalUsuarios),
+            mensagem: `Atualmente existem ${totalUsuarios} usuários cadastrados no Pegasus Finance.`
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao buscar estatísticas' });
+    }
+});

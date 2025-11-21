@@ -208,9 +208,9 @@ async function limparEGerarFuturos(dataReferencia, usuarioId) {
     // 1. Apaga todas as transações previstas futuras para este usuário.
     await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND data >= $1 AND usuario_id = $2", [dataReferencia, usuarioId]);
 
-    // 2. Recria os lançamentos para os próximos 12 meses
+    // 2. Recria os lançamentos para os próximos 60 meses
     const dataInicioObj = new Date(dataReferencia + 'T00:00:00');
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 60; i++) {
         let dataAlvo = new Date(dataInicioObj);
         dataAlvo.setMonth(dataAlvo.getMonth() + i);
         

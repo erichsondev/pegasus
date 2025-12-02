@@ -1,10 +1,16 @@
 /*
  * =================================================================
- * PEGASUS FINANCE 2.0 (VERSÃO TURBO & CORRIGIDA)
+ * PEGASUS FINANCE 2.0 - BACKEND DEFINITIVO
  * =================================================================
+ * * LOG DE MUDANÇAS E CORREÇÕES APLICADAS:
+ * 1. Otimização de Performance: Substituição da recursividade por SQL SUM direto.
+ * 2. Correção de Bug "Vassoura": Atualização cirúrgica por ID (não limpa mais tudo).
+ * 3. Correção de Legado: Deleção híbrida (ID ou Descrição) para itens antigos.
+ * 4. Correção de Projeção: Saldo inicial considera previstos passados para projetar futuro.
+ * 5. Nova Rota: /manutencao/sincronizar-agenda para limpeza de dados órfãos.
  */
 
-// --- 1. IMPORTAÇÕES E CONFIGURAÇÃO INICIAL ---
+// --- 1. IMPORTAÇÕES E CONFIGURAÇÃO ---
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -18,24 +24,13 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(cors());
 
-// --- 2. CONEXÃO COM O BANCO DE DADOS (POSTGRESQL) ---
+// --- 2. BANCO DE DADOS ---
 const db = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
+    ssl: { rejectUnauthorized: false } // Necessário para Render/Neon/Supabase
 });
 
-db.connect()
-    .then(client => {
-        console.log('Conexão com o banco de dados PostgreSQL estabelecida com sucesso!');
-        client.release();
-    })
-    .catch(err => {
-        console.error('ERRO FATAL DE CONEXÃO COM O BANCO DE DADOS:', err.stack);
-    });
-
-// --- 3. INICIALIZAÇÃO DO BANCO DE DADOS ---
+// Inicializa tabelas e aplica migrações automáticas
 const inicializarBancoDeDados = async () => {
     const queries = [
         `CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, nome TEXT NOT NULL, email TEXT NOT NULL UNIQUE, senha_hash TEXT NOT NULL);`,
@@ -47,10 +42,9 @@ const inicializarBancoDeDados = async () => {
     ];
     
     try {
-        for (const query of queries) {
-            await db.query(query);
-        }
-        // Migração para corrigir bug de edições manuais
+        for (const query of queries) await db.query(query);
+        
+        // Migração: Garante que a coluna de vínculo exista para correção do bug de edição
         await db.query(`
             DO $$ 
             BEGIN 
@@ -59,61 +53,66 @@ const inicializarBancoDeDados = async () => {
                 END IF; 
             END $$;
         `);
-        console.log('Tabelas sincronizadas.');
+        console.log('Banco de Dados: Sincronizado e Pronto.');
     } catch (err) {
-        console.error('Erro ao sincronizar tabelas:', err);
+        console.error('Erro Crítico DB:', err);
     }
 };
 inicializarBancoDeDados();
 
-// --- 4. FUNÇÕES AUXILIARES (LÓGICA DE NEGÓCIO) ---
 
-// Geração de lançamentos (Suporta ID específico para atualização cirúrgica)
+// --- 3. LÓGICA DE NEGÓCIO (CORE) ---
+
+/**
+ * Gera lançamentos futuros na tabela de transações.
+ * @param {number} ano 
+ * @param {number} mes 
+ * @param {number} usuarioId 
+ * @param {number|null} lancamentoFixoIdEspecifico - Se fornecido, gera APENAS para este item (Cirúrgico).
+ */
 async function gerarLancamentosPrevistos(ano, mes, usuarioId, lancamentoFixoIdEspecifico = null) {
     try {
         const mesFormatado = String(mes).padStart(2, '0');
         const primeiroDiaDoMesString = `${ano}-${mesFormatado}-01`;
         const ultimoDiaDoMes = new Date(ano, mes, 0).getDate();
-        const ultimoDiaDoMesString = `${ano}-${mesFormatado}-${ultimoDiaDoMes}`;
         
+        // Busca fixos vigentes no período
         let queryBase = `
             SELECT * FROM lancamentos_fixos 
             WHERE usuario_id = $1 
             AND data_inicio <= $2::date
             AND (data_fim IS NULL OR data_fim >= $3::date)
         `;
-        
-        const params = [usuarioId, ultimoDiaDoMesString, primeiroDiaDoMesString];
+        const params = [usuarioId, `${ano}-${mesFormatado}-${ultimoDiaDoMes}`, primeiroDiaDoMesString];
 
+        // Filtro opcional para performance e segurança na edição
         if (lancamentoFixoIdEspecifico) {
             queryBase += ` AND id = $4`;
             params.push(lancamentoFixoIdEspecifico);
         }
 
         const { rows: lancamentosFixos } = await db.query(queryBase, params);
-        
         if (lancamentosFixos.length === 0) return;
 
         for (const fixo of lancamentosFixos) {
-            const existeTransacaoQuery = `
+            // Verifica duplicidade (Compatível com Legado e Novo)
+            const existeQuery = `
                 SELECT 1 FROM transacoes 
                 WHERE (lancamento_fixo_id = $1 OR (lancamento_fixo_id IS NULL AND descricao = $2))
                 AND usuario_id = $3 
                 AND TO_CHAR(data, 'YYYY-MM') = $4
                 LIMIT 1;
             `;
-            const { rows: transacaoExistente } = await db.query(existeTransacaoQuery, [fixo.id, fixo.descricao, usuarioId, `${ano}-${mesFormatado}`]);
+            const { rows: existente } = await db.query(existeQuery, [fixo.id, fixo.descricao, usuarioId, `${ano}-${mesFormatado}`]);
 
-            if (transacaoExistente.length === 0) {
+            if (existente.length === 0) {
                 const dia = Math.min(fixo.dia_do_mes, ultimoDiaDoMes);
                 const dataLancamento = `${ano}-${mesFormatado}-${String(dia).padStart(2, '0')}`;
                 
-                const insertQuery = `
-                    INSERT INTO transacoes 
-                    (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id, lancamento_fixo_id) 
+                await db.query(`
+                    INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id, lancamento_fixo_id) 
                     VALUES ($1, $2, $3, 'previsto', $4, $5, TRUE, $6, $7)
-                `;
-                await db.query(insertQuery, [fixo.descricao, fixo.valor, dataLancamento, fixo.tipo, fixo.categoria_id, usuarioId, fixo.id]);
+                `, [fixo.descricao, fixo.valor, dataLancamento, fixo.tipo, fixo.categoria_id, usuarioId, fixo.id]);
             }
         }
     } catch (error) {
@@ -121,24 +120,27 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId, lancamentoFixoIdEs
     }
 }
 
-// --- VERSÃO OTIMIZADA: CÁLCULO DIRETO NO BANCO (INSTANTÂNEO) ---
+/**
+ * Calcula o saldo e totais de forma OTIMIZADA (SQL Direto).
+ * Corrige a projeção futura removendo o filtro de 'efetivado' do saldo inicial.
+ */
 async function calcularResumoParaMes(ano, mes, usuarioId) {
     try {
         const mesFormatado = String(mes).padStart(2, '0');
         const primeiroDiaDoMes = `${ano}-${mesFormatado}-01`;
 
-        // 1. Saldo Inicial: Soma tudo antes deste mês de uma vez só
+        // 1. Saldo Inicial Acumulado: Soma tudo (Efetivado + Previsto) ANTES deste mês.
+        // Isso garante que se eu estou em Março, o saldo considere o resultado de Fev, Jan, etc.
         const saldoInicialQuery = `
             SELECT COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor ELSE -valor END), 0) as total
             FROM transacoes
             WHERE usuario_id = $1
-            AND status = 'efetivado'
-            AND data < $2
+            AND data < $2 
         `;
         const { rows: saldoRows } = await db.query(saldoInicialQuery, [usuarioId, primeiroDiaDoMes]);
         const saldoInicial = parseFloat(saldoRows[0].total);
 
-        // 2. Busca totais do mês atual
+        // 2. Totais do Mês Solicitado
         const totaisMesQuery = `
             SELECT 
                 SUM(CASE WHEN tipo = 'receita' AND status = 'efetivado' THEN valor ELSE 0 END) as receitas_efetivadas,
@@ -158,26 +160,24 @@ async function calcularResumoParaMes(ano, mes, usuarioId) {
         const totalReceitasPrevistas = parseFloat(totais.receitas_previstas || 0);
         const totalDespesasPrevistas = parseFloat(totais.despesas_previstas || 0);
 
-        // 3. Matemática simples
+        // 3. Matemática Financeira
         const saldoAtualAcumulado = saldoInicial + totalReceitasEfetivadas - totalDespesasEfetivadas;
         const saldoFinalProjetado = saldoAtualAcumulado + totalReceitasPrevistas - totalDespesasPrevistas;
 
         return { 
             saldoInicial, 
-            totalReceitasEfetivadas, 
-            totalDespesasEfetivadas, 
-            totalReceitasPrevistas, 
-            totalDespesasPrevistas, 
-            saldoAtualAcumulado, 
-            saldoFinalProjetado 
+            totalReceitasEfetivadas, totalDespesasEfetivadas, 
+            totalReceitasPrevistas, totalDespesasPrevistas, 
+            saldoAtualAcumulado, saldoFinalProjetado 
         };
     } catch (error) {
-        console.error("Erro ao calcular resumo otimizado:", error);
+        console.error("Erro no resumo:", error);
         return { saldoFinalProjetado: 0 };
     }
 }
 
-// --- 5. MIDDLEWARES ---
+
+// --- 4. MIDDLEWARES ---
 const autenticarToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -190,20 +190,22 @@ const autenticarToken = (req, res, next) => {
     });
 };
 
-const asyncHandler = fn => (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-};
+const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// --- 6. ROTAS DA API ---
-app.get('/api/status', (req, res) => res.json({ status: 'ok' }));
 
+// --- 5. ROTAS ---
+
+// Health Check
+app.get('/api/status', (req, res) => res.json({ status: 'ok', msg: 'Pegasus V2 Online' }));
+
+// --- ROTAS PÚBLICAS (AUTH) ---
 const rotasPublicas = express.Router();
 
 rotasPublicas.post('/usuarios/cadastro', asyncHandler(async (req, res) => {
     const { nome, email, senha } = req.body;
-    if (!nome || !email || !senha) return res.status(400).json({ message: 'Campos obrigatórios.' });
+    if (!nome || !email || !senha) return res.status(400).json({ message: 'Dados incompletos.' });
     const { rows } = await db.query('SELECT id FROM usuarios WHERE email = $1', [email]);
-    if (rows.length > 0) return res.status(409).json({ message: 'Email em uso.' });
+    if (rows.length > 0) return res.status(409).json({ message: 'E-mail já cadastrado.' });
     const senha_hash = await bcrypt.hash(senha, 10);
     const result = await db.query('INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3) RETURNING id', [nome, email, senha_hash]);
     res.status(201).json({ id: result.rows[0].id, nome, email });
@@ -213,17 +215,23 @@ rotasPublicas.post('/usuarios/login', asyncHandler(async (req, res) => {
     const { email, senha } = req.body;
     const { rows } = await db.query('SELECT * FROM usuarios WHERE email = $1', [email]);
     const usuario = rows[0];
-    if (!usuario || !(await bcrypt.compare(senha, usuario.senha_hash))) return res.status(401).json({ message: 'Credenciais inválidas.' });
+    if (!usuario || !(await bcrypt.compare(senha, usuario.senha_hash))) return res.status(401).json({ message: 'Acesso negado.' });
     const token = jwt.sign({ id: usuario.id, nome: usuario.nome }, process.env.JWT_SECRET, { expiresIn: '8h' });
     res.json({ token, usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email } });
 }));
 
+// --- ROTAS PROTEGIDAS ---
 const rotasProtegidas = express.Router();
 rotasProtegidas.use(autenticarToken);
 
-// Função HÍBRIDA para Atualizar/Remover (Corrige Legados e Edição)
+
+/**
+ * ATUALIZAÇÃO INTELIGENTE (HÍBRIDA)
+ * Remove previsões futuras e recria a agenda.
+ * Suporta apagar pelo ID (Novo) OU pela Descrição (Legado).
+ */
 async function atualizarAgendaFuturaEspecifica(dataReferencia, usuarioId, lancamentoFixoId, descricaoOriginal = null) {
-    // 1. Remove futuros: Busca pelo ID (novo) OU Descrição (velho)
+    // 1. Limpeza Cirúrgica
     let queryDelete = `
         DELETE FROM transacoes 
         WHERE gerado_automaticamente = TRUE 
@@ -236,18 +244,45 @@ async function atualizarAgendaFuturaEspecifica(dataReferencia, usuarioId, lancam
     if (descricaoOriginal) paramsDelete.push(descricaoOriginal);
     await db.query(queryDelete, paramsDelete);
 
-    // 2. Regenera agenda apenas para este ID (12 meses)
+    // 2. Regeneração (Apenas para este item)
     const dataInicioObj = new Date(dataReferencia + 'T00:00:00');
     for (let i = 0; i < 12; i++) {
         let dataAlvo = new Date(dataInicioObj);
         dataAlvo.setMonth(dataAlvo.getMonth() + i);
-        let ano = dataAlvo.getFullYear();
-        let mes = dataAlvo.getMonth() + 1;
-        await gerarLancamentosPrevistos(ano, mes, usuarioId, lancamentoFixoId);
+        await gerarLancamentosPrevistos(dataAlvo.getFullYear(), dataAlvo.getMonth() + 1, usuarioId, lancamentoFixoId);
     }
 }
 
-// Rotas Transações
+
+// --- ROTA DE MANUTENÇÃO (LIMPEZA TOTAL DE FANTASMAS) ---
+rotasProtegidas.post('/manutencao/sincronizar-agenda', asyncHandler(async (req, res) => {
+    const usuarioId = req.usuario.id;
+    const hoje = new Date().toISOString().split('T')[0];
+
+    // 1. "Bomba Atômica Controlada": Remove TODO o futuro automático (limpa órfãos/lixo)
+    await db.query(`
+        DELETE FROM transacoes 
+        WHERE usuario_id = $1 
+        AND gerado_automaticamente = TRUE 
+        AND status = 'previsto' 
+        AND data >= $2
+    `, [usuarioId, hoje]);
+
+    // 2. Regeneração Limpa: Recria agenda apenas do que é válido hoje
+    const dataInicioObj = new Date();
+    for (let i = 0; i < 12; i++) {
+        let dataAlvo = new Date(dataInicioObj);
+        dataAlvo.setMonth(dataAlvo.getMonth() + i);
+        // null no último parâmetro força a gerar de TODOS os fixos ativos
+        await gerarLancamentosPrevistos(dataAlvo.getFullYear(), dataAlvo.getMonth() + 1, usuarioId, null);
+    }
+
+    res.status(200).json({ message: "Agenda limpa e regenerada com sucesso." });
+}));
+
+
+// --- TRANSAÇÕES & DASHBOARD ---
+
 rotasProtegidas.get('/resumo', asyncHandler(async (req, res) => {
     const { mes, ano } = req.query;
     res.json(await calcularResumoParaMes(parseInt(ano), parseInt(mes), req.usuario.id));
@@ -291,7 +326,7 @@ rotasProtegidas.put('/transacoes/:id/prever', asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'Revertida.' });
 }));
 
-// Rotas Gráficos
+// --- GRÁFICOS ---
 rotasProtegidas.get('/grafico/evolucao-patrimonial', asyncHandler(async (req, res) => {
     const { inicio, fim } = req.query;
     const usuarioId = req.usuario.id;
@@ -299,16 +334,18 @@ rotasProtegidas.get('/grafico/evolucao-patrimonial', asyncHandler(async (req, re
     let anoAnterior = dataInicioObj.getFullYear(), mesAnterior = dataInicioObj.getMonth();
     if (mesAnterior === 0) { mesAnterior = 12; anoAnterior--; }
     
-    // Usa a função otimizada para pegar o saldo inicial
+    // Obtém saldo inicial usando a função corrigida
     const resumoAnterior = await calcularResumoParaMes(anoAnterior, mesAnterior, usuarioId);
     let saldoAcumulado = resumoAnterior.saldoFinalProjetado;
 
     const sql = `SELECT TO_CHAR(data, 'YYYY-MM') AS mes, SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END) AS receitas, SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE 0 END) AS despesas FROM transacoes WHERE usuario_id = $1 AND data BETWEEN $2 AND $3 GROUP BY mes ORDER BY mes`;
     const { rows } = await db.query(sql, [usuarioId, inicio, fim]);
-    res.json(rows.map(item => {
+    
+    const dados = rows.map(item => {
         saldoAcumulado += parseFloat(item.receitas) - parseFloat(item.despesas);
         return { mes: item.mes, receitas: parseFloat(item.receitas), despesas: parseFloat(item.despesas), saldo_acumulado: saldoAcumulado };
-    }));
+    });
+    res.json(dados);
 }));
 
 rotasProtegidas.get('/grafico/despesas-por-categoria', asyncHandler(async (req, res) => {
@@ -325,11 +362,11 @@ rotasProtegidas.get('/grafico/gastos-por-cartao', asyncHandler(async (req, res) 
     res.json(rows);
 }));
 
-// --- ROTAS CONFIGURAÇÕES (MATRIZ) ---
+
+// --- CONFIGURAÇÕES (MATRIZ) ---
 
 rotasProtegidas.get('/lancamentos-fixos', asyncHandler(async (req, res) => {
-    const sql = 'SELECT lf.*, c.nome as nome_categoria FROM lancamentos_fixos lf LEFT JOIN categorias c ON lf.categoria_id = c.id WHERE lf.usuario_id = $1 ORDER BY lf.tipo, lf.descricao';
-    const { rows } = await db.query(sql, [req.usuario.id]);
+    const { rows } = await db.query('SELECT lf.*, c.nome as nome_categoria FROM lancamentos_fixos lf LEFT JOIN categorias c ON lf.categoria_id = c.id WHERE lf.usuario_id = $1 ORDER BY lf.tipo, lf.descricao', [req.usuario.id]);
     res.json(rows);
 }));
 
@@ -346,42 +383,29 @@ rotasProtegidas.post('/lancamentos-fixos', asyncHandler(async (req, res) => {
 rotasProtegidas.put('/lancamentos-fixos/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { descricao, valor, tipo, dia_do_mes, categoria_id, data_inicio, data_fim } = req.body;
-    const usuarioId = req.usuario.id;
-
-    // Busca descrição antiga para limpar legados
-    const { rows: oldData } = await db.query('SELECT descricao FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
+    
+    // Busca descrição antiga para caso seja necessário limpar legados
+    const { rows: oldData } = await db.query('SELECT descricao FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, req.usuario.id]);
     if (oldData.length === 0) return res.status(404).json({ message: 'Não encontrado.' });
-    const descricaoAntiga = oldData[0].descricao;
-
-    const sql = `UPDATE lancamentos_fixos SET descricao = $1, valor = $2, tipo = $3, dia_do_mes = $4, categoria_id = $5, data_inicio = $6, data_fim = $7 WHERE id = $8 AND usuario_id = $9`;
-    await db.query(sql, [descricao, valor, tipo, dia_do_mes, categoria_id || null, data_inicio, data_fim || null, id, usuarioId]);
-
-    // Regenera (com suporte a limpar órfãos pela descrição antiga)
-    await atualizarAgendaFuturaEspecifica(data_inicio, usuarioId, id, descricaoAntiga);
-    res.status(200).json({ message: 'Atualizado!' });
+    
+    await db.query(`UPDATE lancamentos_fixos SET descricao = $1, valor = $2, tipo = $3, dia_do_mes = $4, categoria_id = $5, data_inicio = $6, data_fim = $7 WHERE id = $8 AND usuario_id = $9`, [descricao, valor, tipo, dia_do_mes, categoria_id || null, data_inicio, data_fim || null, id, req.usuario.id]);
+    
+    // Chama a atualização híbrida (ID + Descrição Antiga)
+    await atualizarAgendaFuturaEspecifica(data_inicio, req.usuario.id, id, oldData[0].descricao);
+    res.status(200).json({ message: 'Atualizado.' });
 }));
 
 rotasProtegidas.delete('/lancamentos-fixos/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const usuarioId = req.usuario.id;
-
-    const { rows: lancamentoInfo } = await db.query('SELECT descricao FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
-    if (lancamentoInfo.length === 0) return res.status(404).send();
+    const { rows: lanc } = await db.query('SELECT descricao FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, req.usuario.id]);
+    if (lanc.length === 0) return res.status(404).send();
     
-    const descricao = lancamentoInfo[0].descricao;
     const hoje = new Date().toISOString().split('T')[0];
-
-    // Delete Híbrido: Apaga pelo ID ou pela Descrição (para os antigos)
-    await db.query(`
-        DELETE FROM transacoes 
-        WHERE gerado_automaticamente = TRUE 
-        AND status = 'previsto' 
-        AND data >= $1 
-        AND usuario_id = $2
-        AND (lancamento_fixo_id = $3 OR (lancamento_fixo_id IS NULL AND descricao = $4))
-    `, [hoje, usuarioId, id, descricao]);
-
-    await db.query('DELETE FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
+    
+    // Delete híbrido (ID + Descrição) para limpar futuro
+    await db.query(`DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND data >= $1 AND usuario_id = $2 AND (lancamento_fixo_id = $3 OR (lancamento_fixo_id IS NULL AND descricao = $4))`, [hoje, req.usuario.id, id, lanc[0].descricao]);
+    
+    await db.query('DELETE FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, req.usuario.id]);
     res.status(204).send();
 }));
 
@@ -414,13 +438,13 @@ rotasProtegidas.delete('/cartoes/:id', asyncHandler(async (req, res) => {
 app.use('/api', rotasPublicas);
 app.use('/api', rotasProtegidas);
 
-// --- 7. HANDLER DE ERROS ---
+// --- 6. HANDLER DE ERROS GLOBAL ---
 app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ message: 'Erro interno.' });
+    console.error('SERVER ERROR:', err);
+    res.status(500).json({ message: 'Erro interno no servidor.' });
 });
 
-// --- 8. INICIALIZAÇÃO ---
+// --- 7. INICIALIZAÇÃO ---
 app.listen(PORT, () => {
-    console.log(`Servidor Pegasus 2.0 Turbo rodando na porta ${PORT}`);
+    console.log(`Servidor Pegasus rodando na porta ${PORT}`);
 });

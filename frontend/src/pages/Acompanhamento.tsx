@@ -277,10 +277,12 @@ const Acompanhamento = () => {
 
   const handleEditar = (transacao: Transacao) => {
     setEditandoId(transacao.id);
+    // IMPORTANTE: Garantir que a data carregada para edição esteja no formato YYYY-MM-DD
+    const dataFormatada = transacao.data.split('T')[0];
     setFormData({
       descricao: transacao.descricao,
       valor: transacao.valor.toString(),
-      data: transacao.data,
+      data: dataFormatada,
       tipo: transacao.tipo,
       categoria_id: transacao.categoria_id?.toString() || "",
       cartao_id: transacao.cartao_id?.toString() || "",
@@ -613,7 +615,7 @@ const Acompanhamento = () => {
                             <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
                               {/* DATA VISUAL: dd/mm/aaaa */}
                               <span className="font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600">
-                                {transacao.data.split('-').reverse().join('/')}
+                                {transacao.data.split('T')[0].split('-').reverse().join('/')}
                               </span>
                               <Badge variant="secondary" className="font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">
                                 {transacao.nome_categoria}

@@ -1,6 +1,6 @@
 /*
  * =================================================================
- * PEGASUS FINANCE 2.0
+ * PEGASUS FINANCE 2.0 (CORRIGIDO)
  * =================================================================
  */
 
@@ -54,6 +54,18 @@ const inicializarBancoDeDados = async () => {
         for (const query of queries) {
             await db.query(query);
         }
+
+        // --- MIGRAÇÃO AUTOMÁTICA: Adiciona a coluna de vínculo se não existir ---
+        // Isso é crucial para corrigir o bug de sobrescrever edições manuais
+        await db.query(`
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='transacoes' AND column_name='lancamento_fixo_id') THEN 
+                    ALTER TABLE transacoes ADD COLUMN lancamento_fixo_id INTEGER REFERENCES lancamentos_fixos(id) ON DELETE SET NULL; 
+                END IF; 
+            END $$;
+        `);
+
         console.log('Tabelas do Pegasus 2.0 sincronizadas com sucesso.');
     } catch (err) {
         console.error('Erro ao sincronizar tabelas:', err);
@@ -63,41 +75,55 @@ inicializarBancoDeDados();
 
 
 // --- 4. FUNÇÕES AUXILIARES (LÓGICA DE NEGÓCIO) ---
-async function gerarLancamentosPrevistos(ano, mes, usuarioId) {
+async function gerarLancamentosPrevistos(ano, mes, usuarioId, lancamentoFixoIdEspecifico = null) {
     try {
         const mesFormatado = String(mes).padStart(2, '0');
         const primeiroDiaDoMesString = `${ano}-${mesFormatado}-01`;
         const ultimoDiaDoMes = new Date(ano, mes, 0).getDate();
         const ultimoDiaDoMesString = `${ano}-${mesFormatado}-${ultimoDiaDoMes}`;
         
-        const lancamentosFixosQuery = `
+        let queryBase = `
             SELECT * FROM lancamentos_fixos 
             WHERE usuario_id = $1 
             AND data_inicio <= $2::date
             AND (data_fim IS NULL OR data_fim >= $3::date)
         `;
-        const { rows: lancamentosFixos } = await db.query(lancamentosFixosQuery, [usuarioId, ultimoDiaDoMesString, primeiroDiaDoMesString]);
+        
+        const params = [usuarioId, ultimoDiaDoMesString, primeiroDiaDoMesString];
+
+        // Se passamos um ID específico, filtramos apenas ele para ser mais eficiente e seguro
+        if (lancamentoFixoIdEspecifico) {
+            queryBase += ` AND id = $4`;
+            params.push(lancamentoFixoIdEspecifico);
+        }
+
+        const { rows: lancamentosFixos } = await db.query(queryBase, params);
         
         if (lancamentosFixos.length === 0) return;
 
-        // Para cada item fixo da sua matriz...
         for (const fixo of lancamentosFixos) {
-            // Verifica se já existe uma transação com essa descrição neste mês
+            // Verifica se já existe uma transação deste fixo neste mês
+            // A lógica (lancamento_fixo_id IS NULL AND descricao = $2) mantém compatibilidade com dados antigos
             const existeTransacaoQuery = `
                 SELECT 1 FROM transacoes 
-                WHERE descricao = $1 
-                AND usuario_id = $2 
-                AND TO_CHAR(data, 'YYYY-MM') = $3
+                WHERE (lancamento_fixo_id = $1 OR (lancamento_fixo_id IS NULL AND descricao = $2))
+                AND usuario_id = $3 
+                AND TO_CHAR(data, 'YYYY-MM') = $4
                 LIMIT 1;
             `;
-            const { rows: transacaoExistente } = await db.query(existeTransacaoQuery, [fixo.descricao, usuarioId, `${ano}-${mesFormatado}`]);
+            const { rows: transacaoExistente } = await db.query(existeTransacaoQuery, [fixo.id, fixo.descricao, usuarioId, `${ano}-${mesFormatado}`]);
 
-            // Se a transação NÃO existir, então pode criar.
+            // Se a transação NÃO existir, cria vinculada ao ID do fixo
             if (transacaoExistente.length === 0) {
                 const dia = Math.min(fixo.dia_do_mes, ultimoDiaDoMes);
                 const dataLancamento = `${ano}-${mesFormatado}-${String(dia).padStart(2, '0')}`;
-                const insertQuery = 'INSERT INTO transacoes (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id) VALUES ($1, $2, $3, \'previsto\', $4, $5, TRUE, $6)';
-                await db.query(insertQuery, [fixo.descricao, fixo.valor, dataLancamento, fixo.tipo, fixo.categoria_id, usuarioId]);
+                
+                const insertQuery = `
+                    INSERT INTO transacoes 
+                    (descricao, valor, data, status, tipo, categoria_id, gerado_automaticamente, usuario_id, lancamento_fixo_id) 
+                    VALUES ($1, $2, $3, 'previsto', $4, $5, TRUE, $6, $7)
+                `;
+                await db.query(insertQuery, [fixo.descricao, fixo.valor, dataLancamento, fixo.tipo, fixo.categoria_id, usuarioId, fixo.id]);
             }
         }
     } catch (error) {
@@ -192,23 +218,34 @@ rotasPublicas.post('/usuarios/login', asyncHandler(async (req, res) => {
 }));
 
 rotasPublicas.post('/usuarios/recuperar-senha', asyncHandler(async (req, res) => {
-    // Código de recuperação de senha inalterado
+    // Código de recuperação de senha (placeholder)
+    res.status(501).json({ message: "Funcionalidade não implementada neste exemplo." });
 }));
 
 rotasPublicas.post('/usuarios/resetar-senha', asyncHandler(async (req, res) => {
-    // Código de reset de senha inalterado
+    // Código de reset de senha (placeholder)
+    res.status(501).json({ message: "Funcionalidade não implementada neste exemplo." });
 }));
 
 // 6.2 Roteador para Rotas Protegidas
 const rotasProtegidas = express.Router();
 rotasProtegidas.use(autenticarToken);
 
-// Função auxiliar para limpar e gerar lançamentos futuros de forma segura
-async function limparEGerarFuturos(dataReferencia, usuarioId) {
-    // 1. Apaga todas as transações previstas futuras para este usuário.
-    await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND data >= $1 AND usuario_id = $2", [dataReferencia, usuarioId]);
+// --- NOVA FUNÇÃO INTELIGENTE DE ATUALIZAÇÃO ---
+// Em vez de limpar tudo, limpa apenas o que pertence ao ID modificado
+async function atualizarAgendaFuturaEspecifica(dataReferencia, usuarioId, lancamentoFixoId) {
+    // 1. Apaga apenas transações previstas futuras DESTE item específico
+    // Transações efetivadas ou editadas manualmente (sem o link) não serão afetadas.
+    await db.query(`
+        DELETE FROM transacoes 
+        WHERE gerado_automaticamente = TRUE 
+        AND status = 'previsto' 
+        AND data >= $1 
+        AND usuario_id = $2
+        AND lancamento_fixo_id = $3
+    `, [dataReferencia, usuarioId, lancamentoFixoId]);
 
-    // 2. Recria os lançamentos para os próximos 12 meses
+    // 2. Recria os lançamentos apenas para este item nos próximos 12 meses
     const dataInicioObj = new Date(dataReferencia + 'T00:00:00');
     for (let i = 0; i < 12; i++) {
         let dataAlvo = new Date(dataInicioObj);
@@ -217,21 +254,15 @@ async function limparEGerarFuturos(dataReferencia, usuarioId) {
         let ano = dataAlvo.getFullYear();
         let mes = dataAlvo.getMonth() + 1;
         
-        const mesFormatado = `${ano}-${String(mes).padStart(2, '0')}`;
-        await db.query("DELETE FROM transacoes WHERE gerado_automaticamente = TRUE AND status = 'previsto' AND TO_CHAR(data, 'YYYY-MM') = $1 AND usuario_id = $2", [mesFormatado, usuarioId]);
-        await gerarLancamentosPrevistos(ano, mes, usuarioId);
+        // Chama a geração passando o ID específico
+        await gerarLancamentosPrevistos(ano, mes, usuarioId, lancamentoFixoId);
     }
 }
 
-// --- CORREÇÃO 1: Rota Resumo sem "Re-geração Automática" ---
+// Rota Resumo sem "Re-geração Automática"
 rotasProtegidas.get('/resumo', asyncHandler(async (req, res) => {
     const { mes, ano } = req.query;
     const usuarioId = req.usuario.id;
-
-    // REMOVIDO: O bloco "if (existentes.length === 0)" foi deletado.
-    // A rota agora apenas CALCULA os saldos, sem tentar inserir dados se estiver vazio.
-    // Isso permite que você "limpe" o mês sem que o sistema coloque tudo de volta.
-
     const resumoCompleto = await calcularResumoParaMes(parseInt(ano), parseInt(mes), usuarioId);
     res.json(resumoCompleto);
 }));
@@ -259,6 +290,8 @@ rotasProtegidas.put('/transacoes/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { descricao, valor, data, status, categoria_id, cartao_id } = req.body;
     const usuarioId = req.usuario.id;
+    // Ao editar manualmente, não removemos o lancamento_fixo_id para manter o rastreio,
+    // mas se o usuário quiser desvincular, a lógica poderia ser adicionada aqui.
     const sql = `
         UPDATE transacoes 
         SET descricao = $1, valor = $2, data = $3, categoria_id = $4, cartao_id = $5, status = $6
@@ -284,7 +317,7 @@ rotasProtegidas.put('/transacoes/:id/prever', asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'Transação revertida para previsto!' });
 }));
 
-// Rotas de Gráficos (inalteradas)
+// Rotas de Gráficos
 rotasProtegidas.get('/grafico/evolucao-patrimonial', asyncHandler(async (req, res) => {
     const { inicio, fim } = req.query;
     const usuarioId = req.usuario.id;
@@ -355,7 +388,8 @@ rotasProtegidas.get('/grafico/gastos-por-cartao', asyncHandler(async (req, res) 
     res.json(rows);
 }));
 
-// --- ROTAS DE CONFIGURAÇÕES (MATRIZ) ---
+// --- ROTAS DE CONFIGURAÇÕES (MATRIZ) - ATUALIZADAS ---
+
 rotasProtegidas.get('/lancamentos-fixos', asyncHandler(async (req, res) => {
     const sql = 'SELECT lf.*, c.nome as nome_categoria FROM lancamentos_fixos lf LEFT JOIN categorias c ON lf.categoria_id = c.id WHERE lf.usuario_id = $1 ORDER BY lf.tipo, lf.descricao';
     const { rows } = await db.query(sql, [req.usuario.id]);
@@ -367,18 +401,18 @@ rotasProtegidas.post('/lancamentos-fixos', asyncHandler(async (req, res) => {
     const sql = 'INSERT INTO lancamentos_fixos (descricao, valor, tipo, dia_do_mes, categoria_id, usuario_id, data_inicio, data_fim) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id';
     const { rows } = await db.query(sql, [descricao, valor, tipo, dia_do_mes, categoria_id || null, req.usuario.id, data_inicio, data_fim || null]);
     
-    await limparEGerarFuturos(data_inicio, req.usuario.id);
+    const novoId = rows[0].id;
+    // CORREÇÃO: Gera apenas para o novo ID, sem limpar tudo
+    await atualizarAgendaFuturaEspecifica(data_inicio, req.usuario.id, novoId);
     
-    res.status(201).json({ id: rows[0].id });
+    res.status(201).json({ id: novoId });
 }));
 
-// --- CORREÇÃO 2: Nova Rota PUT para Editar Lançamentos Fixos ---
 rotasProtegidas.put('/lancamentos-fixos/:id', asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { descricao, valor, tipo, dia_do_mes, categoria_id, data_inicio, data_fim } = req.body;
     const usuarioId = req.usuario.id;
 
-    // Atualiza o registro no banco
     const sql = `
         UPDATE lancamentos_fixos 
         SET descricao = $1, valor = $2, tipo = $3, dia_do_mes = $4, categoria_id = $5, data_inicio = $6, data_fim = $7
@@ -390,8 +424,8 @@ rotasProtegidas.put('/lancamentos-fixos/:id', asyncHandler(async (req, res) => {
 
     if (rowCount === 0) return res.status(404).json({ message: 'Item não encontrado.' });
 
-    // Refaz a agenda futura baseada na nova configuração
-    await limparEGerarFuturos(data_inicio, usuarioId);
+    // CORREÇÃO: Remove futuros e regenera APENAS para este ID
+    await atualizarAgendaFuturaEspecifica(data_inicio, usuarioId, id);
     
     res.status(200).json({ message: 'Configuração atualizada!' });
 }));
@@ -403,9 +437,18 @@ rotasProtegidas.delete('/lancamentos-fixos/:id', asyncHandler(async (req, res) =
     const { rows: lancamentoInfo } = await db.query('SELECT data_inicio FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
     if (lancamentoInfo.length === 0) return res.status(404).send();
     
-    const data_inicio = lancamentoInfo[0].data_inicio;
+    // CORREÇÃO: Apaga futuros APENAS deste ID antes de deletar o pai
+    const hoje = new Date().toISOString().split('T')[0];
+    await db.query(`
+        DELETE FROM transacoes 
+        WHERE gerado_automaticamente = TRUE 
+        AND status = 'previsto' 
+        AND data >= $1 
+        AND usuario_id = $2
+        AND lancamento_fixo_id = $3
+    `, [hoje, usuarioId, id]);
+
     await db.query('DELETE FROM lancamentos_fixos WHERE id = $1 AND usuario_id = $2', [id, usuarioId]);
-    await limparEGerarFuturos(data_inicio, usuarioId);
 
     res.status(204).send();
 }));

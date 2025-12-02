@@ -46,7 +46,8 @@ import {
   ArrowUpDown, 
   Filter,
   Undo2, 
-  Layers 
+  Layers,
+  CalendarClock // Ícone para o botão de mudar data rápido
 } from "lucide-react";
 
 const Acompanhamento = () => {
@@ -64,10 +65,17 @@ const Acompanhamento = () => {
   
   const { toast } = useToast();
 
+  // Função para pegar a data local correta (evita bug de fuso horário -1 dia)
+  const getHojeLocal = () => {
+    const hoje = new Date();
+    const offset = hoje.getTimezoneOffset() * 60000;
+    return new Date(hoje.getTime() - offset).toISOString().split('T')[0];
+  };
+
   const [formData, setFormData] = useState({
     descricao: "",
     valor: "",
-    data: new Date().toISOString().split('T')[0], // DATA PADRÃO: HOJE
+    data: getHojeLocal(),
     tipo: "receita" as "receita" | "despesa" | "investimento",
     categoria_id: "",
     cartao_id: "",
@@ -158,13 +166,35 @@ const Acompanhamento = () => {
     }
   };
 
+  // --- NOVA FUNÇÃO: ALTERAR DATA RÁPIDO ---
+  const handleAlterarData = async (id: number, novaData: string) => {
+    const atual = transacoes.find(t => t.id === id);
+    if (!atual) return;
+
+    try {
+      await editarTransacao(id, {
+        ...atual,
+        data: novaData, // Apenas atualiza a data
+        categoria_id: atual.categoria_id ? Number(atual.categoria_id) : undefined,
+        cartao_id: atual.cartao_id ? Number(atual.cartao_id) : undefined,
+        status: atual.status as 'efetivado' | 'previsto',
+        tipo: atual.tipo as 'receita' | 'despesa'
+      });
+      
+      toast({ title: "Data alterada!", className: "bg-blue-600 text-white border-none" });
+      carregarDados();
+    } catch (error) {
+      toast({ title: "Erro ao mudar data", variant: "destructive" });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const transacao = {
       descricao: formData.descricao,
       valor: parseFloat(formData.valor),
-      data: formData.data, // USA A DATA SELECIONADA NO CALENDÁRIO
+      data: formData.data,
       status: formData.efetivado ? 'efetivado' as const : 'previsto' as const,
       tipo: formData.tipo,
       categoria_id: formData.categoria_id ? parseInt(formData.categoria_id) : undefined,
@@ -180,11 +210,10 @@ const Acompanhamento = () => {
         await adicionarTransacao(transacao);
         toast({ title: "Transação adicionada!" });
       }
-      // Reseta o form mantendo a data de hoje como padrão para o próximo
       setFormData({ 
         descricao: "", 
         valor: "", 
-        data: new Date().toISOString().split('T')[0], 
+        data: getHojeLocal(), 
         tipo: formData.tipo, 
         categoria_id: "", 
         cartao_id: "", 
@@ -205,10 +234,7 @@ const Acompanhamento = () => {
       });
 
       if (response.ok) {
-        toast({ 
-          title: "Pagamento Confirmado!", 
-          className: "bg-green-600 text-white border-none"
-        });
+        toast({ title: "Pagamento Confirmado!", className: "bg-green-600 text-white border-none" });
         carregarDados();
       } else {
         throw new Error();
@@ -227,11 +253,7 @@ const Acompanhamento = () => {
       });
 
       if (response.ok) {
-        toast({ 
-          title: "Transação Revertida!", 
-          description: "Voltou para status 'Previsto'.",
-          className: "bg-orange-500 text-white border-none"
-        });
+        toast({ title: "Transação Revertida!", description: "Voltou para status 'Previsto'.", className: "bg-orange-500 text-white border-none" });
         carregarDados();
       } else {
         throw new Error();
@@ -246,7 +268,7 @@ const Acompanhamento = () => {
     setFormData({
       descricao: transacao.descricao,
       valor: transacao.valor.toString(),
-      data: transacao.data, // PREENCHE A DATA CORRETA NA EDIÇÃO
+      data: transacao.data,
       tipo: transacao.tipo,
       categoria_id: transacao.categoria_id?.toString() || "",
       cartao_id: transacao.cartao_id?.toString() || "",
@@ -399,7 +421,6 @@ const Acompanhamento = () => {
                         <Input value={formData.descricao} onChange={(e) => setFormData({ ...formData, descricao: e.target.value })} required placeholder="Ex: Supermercado" className="mt-1" />
                       </div>
                       
-                      {/* CAMPO DE DATA NOVO: LADO A LADO COM O VALOR */}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs">Valor (R$)</Label>
@@ -407,12 +428,13 @@ const Acompanhamento = () => {
                         </div>
                         <div>
                           <Label className="text-xs">Data</Label>
+                          {/* CSS trick: hide default calendar icon so it's not cut off */}
                           <Input 
                             type="date" 
                             value={formData.data} 
                             onChange={(e) => setFormData({ ...formData, data: e.target.value })} 
                             required 
-                            className="mt-1" 
+                            className="mt-1 [&::-webkit-calendar-picker-indicator]:hidden" 
                           />
                         </div>
                       </div>
@@ -460,7 +482,7 @@ const Acompanhamento = () => {
                             setFormData({ 
                               descricao: "", 
                               valor: "", 
-                              data: new Date().toISOString().split('T')[0], // Reset para hoje
+                              data: getHojeLocal(),
                               tipo: "receita", 
                               categoria_id: "", 
                               cartao_id: "", 
@@ -575,8 +597,9 @@ const Acompanhamento = () => {
                           <div className="min-w-0">
                             <p className="font-semibold text-slate-800 truncate">{transacao.descricao}</p>
                             <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                              <span className="font-mono font-bold bg-slate-100 px-1.5 rounded text-slate-600">
-                                Dia {transacao.data.split('-')[2]}
+                              {/* DATA VISUAL CORRIGIDA: dd/mm/aaaa */}
+                              <span className="font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600">
+                                {transacao.data.split('-').reverse().join('/')}
                               </span>
                               <Badge variant="secondary" className="font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">
                                 {transacao.nome_categoria}
@@ -596,6 +619,26 @@ const Acompanhamento = () => {
                           </p>
                           <div className="flex justify-end gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                             
+                            {/* BOTÃO CALENDÁRIO RÁPIDO - COM ÍCONE E INPUT OCULTO */}
+                            <div className="relative inline-block">
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                className="h-7 w-7 text-slate-400 hover:text-blue-600"
+                                title="Alterar Data"
+                              >
+                                <CalendarClock className="w-4 h-4" />
+                              </Button>
+                              <input 
+                                type="date" 
+                                className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                                onChange={(e) => {
+                                  if(e.target.value) handleAlterarData(transacao.id, e.target.value);
+                                }}
+                                onClick={(e) => e.stopPropagation()} // Impede clique no item pai se houver
+                              />
+                            </div>
+
                             {/* LOGICA DO BOTÃO EFETIVAR / REVERTER */}
                             {transacao.status === 'previsto' ? (
                               <Button 

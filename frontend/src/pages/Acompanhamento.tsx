@@ -30,7 +30,24 @@ import {
   type Resumo
 } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Trash2, Check, X, Calendar, TrendingUp, TrendingDown, Wallet, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
+import { 
+  Pencil, 
+  Trash2, 
+  Check, 
+  X, 
+  Calendar, 
+  TrendingUp, 
+  TrendingDown, 
+  Wallet, 
+  AlertCircle, 
+  ChevronLeft, 
+  ChevronRight, 
+  CheckCircle2,
+  ArrowUpDown, 
+  Filter,
+  Undo2, 
+  Layers 
+} from "lucide-react";
 
 const Acompanhamento = () => {
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
@@ -39,32 +56,60 @@ const Acompanhamento = () => {
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [mesSelecionado, setMesSelecionado] = useState("");
   const [editandoId, setEditandoId] = useState<number | null>(null);
+  
+  // --- ESTADOS DE ORGANIZAÇÃO E FILTRO ---
+  const [ordemAsc, setOrdemAsc] = useState(true); 
+  const [priorizarPendentes, setPriorizarPendentes] = useState(true); 
+  const [filtroTipo, setFiltroTipo] = useState<'todos' | 'receita' | 'despesa'>('todos');
+  
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
     descricao: "",
     valor: "",
+    data: new Date().toISOString().split('T')[0], // DATA PADRÃO: HOJE
     tipo: "receita" as "receita" | "despesa" | "investimento",
     categoria_id: "",
     cartao_id: "",
     efetivado: false
   });
 
-  // Inicializa com o mês atual
   useEffect(() => {
     const hoje = new Date();
     const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
     setMesSelecionado(mesAtual);
   }, []);
 
-  // Recarrega sempre que o mês mudar
   useEffect(() => {
     if (mesSelecionado) {
       carregarDados();
     }
   }, [mesSelecionado]);
 
-  // Gera a lista de meses para o Dropdown
+  // --- LÓGICA DE ORGANIZAÇÃO E FILTRAGEM ---
+  const transacoesExibidas = useMemo(() => {
+    let lista = [...transacoes];
+
+    if (filtroTipo !== 'todos') {
+      lista = lista.filter(t => t.tipo === filtroTipo);
+    }
+
+    lista.sort((a, b) => {
+      if (ordemAsc) return a.data.localeCompare(b.data);
+      return b.data.localeCompare(a.data);
+    });
+
+    if (priorizarPendentes) {
+      lista.sort((a, b) => {
+        if (a.status === 'previsto' && b.status === 'efetivado') return -1;
+        if (a.status === 'efetivado' && b.status === 'previsto') return 1;
+        return 0;
+      });
+    }
+
+    return lista;
+  }, [transacoes, ordemAsc, priorizarPendentes, filtroTipo]);
+
   const opcoesMeses = useMemo(() => {
     if (!mesSelecionado) return [];
     const [ano, mes] = mesSelecionado.split('-').map(Number);
@@ -115,14 +160,11 @@ const Acompanhamento = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const [ano, mes] = mesSelecionado.split('-');
-    const dia = new Date().getDate();
-    const dataFormatada = `${ano}-${mes}-${String(dia).padStart(2, '0')}`;
     
     const transacao = {
       descricao: formData.descricao,
       valor: parseFloat(formData.valor),
-      data: dataFormatada,
+      data: formData.data, // USA A DATA SELECIONADA NO CALENDÁRIO
       status: formData.efetivado ? 'efetivado' as const : 'previsto' as const,
       tipo: formData.tipo,
       categoria_id: formData.categoria_id ? parseInt(formData.categoria_id) : undefined,
@@ -138,14 +180,22 @@ const Acompanhamento = () => {
         await adicionarTransacao(transacao);
         toast({ title: "Transação adicionada!" });
       }
-      setFormData({ descricao: "", valor: "", tipo: formData.tipo, categoria_id: "", cartao_id: "", efetivado: false });
+      // Reseta o form mantendo a data de hoje como padrão para o próximo
+      setFormData({ 
+        descricao: "", 
+        valor: "", 
+        data: new Date().toISOString().split('T')[0], 
+        tipo: formData.tipo, 
+        categoria_id: "", 
+        cartao_id: "", 
+        efetivado: false 
+      });
       carregarDados();
     } catch (error) {
       toast({ title: "Erro ao salvar", variant: "destructive" });
     }
   };
 
-  // --- NOVA FUNÇÃO: EFETIVAR RÁPIDO ---
   const handleEfetivar = async (id: number) => {
     try {
       const token = localStorage.getItem("token");
@@ -156,10 +206,10 @@ const Acompanhamento = () => {
 
       if (response.ok) {
         toast({ 
-          title: "Pagamento Efetivado!", 
-          className: "bg-green-600 text-white border-none" // Destaque visual
+          title: "Pagamento Confirmado!", 
+          className: "bg-green-600 text-white border-none"
         });
-        carregarDados(); // Recarrega a lista para atualizar saldos
+        carregarDados();
       } else {
         throw new Error();
       }
@@ -168,11 +218,35 @@ const Acompanhamento = () => {
     }
   };
 
+  const handleReverter = async (id: number) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes/${id}/prever`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        toast({ 
+          title: "Transação Revertida!", 
+          description: "Voltou para status 'Previsto'.",
+          className: "bg-orange-500 text-white border-none"
+        });
+        carregarDados();
+      } else {
+        throw new Error();
+      }
+    } catch (error) {
+      toast({ title: "Erro ao reverter", variant: "destructive" });
+    }
+  };
+
   const handleEditar = (transacao: Transacao) => {
     setEditandoId(transacao.id);
     setFormData({
       descricao: transacao.descricao,
       valor: transacao.valor.toString(),
+      data: transacao.data, // PREENCHE A DATA CORRETA NA EDIÇÃO
       tipo: transacao.tipo,
       categoria_id: transacao.categoria_id?.toString() || "",
       cartao_id: transacao.cartao_id?.toString() || "",
@@ -247,7 +321,6 @@ const Acompanhamento = () => {
             <TabsTrigger value="lancamentos">Lançamentos</TabsTrigger>
           </TabsList>
 
-          {/* ABA 1: VISÃO GERAL */}
           <TabsContent value="geral">
             {resumo && (
               <div className="space-y-6">
@@ -306,7 +379,6 @@ const Acompanhamento = () => {
             )}
           </TabsContent>
 
-          {/* ABA 2: LANÇAMENTOS */}
           <TabsContent value="lancamentos">
             <div className="grid lg:grid-cols-[350px_1fr] gap-8">
               
@@ -326,10 +398,25 @@ const Acompanhamento = () => {
                         <Label className="text-xs">Descrição</Label>
                         <Input value={formData.descricao} onChange={(e) => setFormData({ ...formData, descricao: e.target.value })} required placeholder="Ex: Supermercado" className="mt-1" />
                       </div>
-                      <div>
-                        <Label className="text-xs">Valor (R$)</Label>
-                        <Input type="number" step="0.01" value={formData.valor} onChange={(e) => setFormData({ ...formData, valor: e.target.value })} required className="mt-1" />
+                      
+                      {/* CAMPO DE DATA NOVO: LADO A LADO COM O VALOR */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs">Valor (R$)</Label>
+                          <Input type="number" step="0.01" value={formData.valor} onChange={(e) => setFormData({ ...formData, valor: e.target.value })} required className="mt-1" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Data</Label>
+                          <Input 
+                            type="date" 
+                            value={formData.data} 
+                            onChange={(e) => setFormData({ ...formData, data: e.target.value })} 
+                            required 
+                            className="mt-1" 
+                          />
+                        </div>
                       </div>
+
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs">Tipo</Label>
@@ -368,7 +455,18 @@ const Acompanhamento = () => {
                       </div>
                       <div className="flex gap-2 pt-2">
                         {editandoId && (
-                          <Button type="button" variant="outline" onClick={() => { setEditandoId(null); setFormData({ descricao: "", valor: "", tipo: "receita", categoria_id: "", cartao_id: "", efetivado: false }); }} className="flex-1">
+                          <Button type="button" variant="outline" onClick={() => { 
+                            setEditandoId(null); 
+                            setFormData({ 
+                              descricao: "", 
+                              valor: "", 
+                              data: new Date().toISOString().split('T')[0], // Reset para hoje
+                              tipo: "receita", 
+                              categoria_id: "", 
+                              cartao_id: "", 
+                              efetivado: false 
+                            }); 
+                          }} className="flex-1">
                             <X className="w-4 h-4 mr-2" /> Cancelar
                           </Button>
                         )}
@@ -384,36 +482,92 @@ const Acompanhamento = () => {
 
               {/* Lista */}
               <div className="order-1 lg:order-2 space-y-4">
-                <div className="flex justify-between items-center bg-white/60 p-3 rounded-lg shadow-sm border border-slate-100 backdrop-blur-sm">
-                  <h3 className="font-bold text-slate-700">Extrato do Mês</h3>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                        <Trash2 className="w-4 h-4 mr-2" /> Limpar Mês
+                
+                {/* --- HEADER COM FILTROS AVANÇADOS --- */}
+                <div className="bg-white/60 p-4 rounded-lg shadow-sm border border-slate-100 backdrop-blur-sm flex flex-col gap-3">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-slate-700">Extrato</h3>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:text-red-700 hover:bg-red-50" title="Apagar TUDO deste mês">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Cuidado Absoluto!</AlertDialogTitle>
+                          <AlertDialogDescription>Isso apagará <b>todas</b> as transações deste mês.</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleLimparMes} className="bg-red-600 hover:bg-red-700">Confirmar</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {/* Botões de Filtro de Tipo */}
+                    <div className="flex bg-slate-100 rounded-md p-1 gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setFiltroTipo('todos')}
+                        className={`h-7 px-3 text-xs ${filtroTipo === 'todos' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
+                      >
+                        <Layers className="w-3 h-3 mr-1" /> Todos
                       </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Cuidado Absoluto!</AlertDialogTitle>
-                        <AlertDialogDescription>Isso apagará <b>todas</b> as transações deste mês.</AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleLimparMes} className="bg-red-600 hover:bg-red-700">Confirmar Exclusão</AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setFiltroTipo('receita')}
+                        className={`h-7 px-3 text-xs ${filtroTipo === 'receita' ? 'bg-white text-green-700 shadow-sm' : 'text-slate-500'}`}
+                      >
+                        <TrendingUp className="w-3 h-3 mr-1" /> Receitas
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setFiltroTipo('despesa')}
+                        className={`h-7 px-3 text-xs ${filtroTipo === 'despesa' ? 'bg-white text-red-700 shadow-sm' : 'text-slate-500'}`}
+                      >
+                        <TrendingDown className="w-3 h-3 mr-1" /> Despesas
+                      </Button>
+                    </div>
+
+                    <div className="flex gap-2 ml-auto">
+                      <Button 
+                        variant={ordemAsc ? "default" : "outline"} 
+                        size="sm" 
+                        onClick={() => setOrdemAsc(!ordemAsc)}
+                        className={`h-8 text-xs ${ordemAsc ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200' : 'text-slate-500'}`}
+                      >
+                        <ArrowUpDown className="w-3 h-3 mr-1" />
+                        {ordemAsc ? "Data (Cresc.)" : "Data (Decresc.)"}
+                      </Button>
+
+                      <Button 
+                        variant={priorizarPendentes ? "default" : "outline"} 
+                        size="sm" 
+                        onClick={() => setPriorizarPendentes(!priorizarPendentes)}
+                        className={`h-8 text-xs ${priorizarPendentes ? 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200' : 'text-slate-500'}`}
+                      >
+                        <Filter className="w-3 h-3 mr-1" />
+                        Pendentes
+                      </Button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
-                  {transacoes.length === 0 ? (
+                  {transacoesExibidas.length === 0 ? (
                     <div className="text-center py-16 bg-white/40 rounded-lg border border-dashed border-slate-300">
                       <p className="text-slate-500 mb-2">Nenhuma transação encontrada.</p>
                       <p className="text-xs text-slate-400">Use o formulário para começar.</p>
                     </div>
                   ) : (
-                    transacoes.map(transacao => (
-                      <div key={transacao.id} className={`group flex items-center justify-between p-4 bg-white/80 border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'opacity-75 bg-slate-50/50' : ''}`}>
+                    transacoesExibidas.map(transacao => (
+                      <div key={transacao.id} className={`group flex items-center justify-between p-4 bg-white/80 border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'opacity-90 bg-white border-l-4 border-l-orange-400' : 'opacity-70 bg-slate-50'}`}>
                         <div className="flex items-center gap-4 overflow-hidden">
                           <div className={`p-2 rounded-full ${transacao.tipo === 'receita' ? 'bg-green-100' : 'bg-red-100'}`}>
                             {transacao.tipo === 'receita' ? <TrendingUp className="w-5 h-5 text-green-600" /> : <TrendingDown className="w-5 h-5 text-red-600" />}
@@ -421,6 +575,9 @@ const Acompanhamento = () => {
                           <div className="min-w-0">
                             <p className="font-semibold text-slate-800 truncate">{transacao.descricao}</p>
                             <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                              <span className="font-mono font-bold bg-slate-100 px-1.5 rounded text-slate-600">
+                                Dia {transacao.data.split('-')[2]}
+                              </span>
                               <Badge variant="secondary" className="font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">
                                 {transacao.nome_categoria}
                               </Badge>
@@ -438,16 +595,27 @@ const Acompanhamento = () => {
                             {transacao.tipo === 'despesa' ? '-' : '+'}{formatarMoeda(transacao.valor)}
                           </p>
                           <div className="flex justify-end gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {/* BOTÃO NOVO DE EFETIVAR */}
-                            {transacao.status === 'previsto' && (
+                            
+                            {/* LOGICA DO BOTÃO EFETIVAR / REVERTER */}
+                            {transacao.status === 'previsto' ? (
                               <Button 
                                 size="icon" 
                                 variant="ghost" 
                                 className="h-7 w-7 text-slate-400 hover:text-green-600 hover:bg-green-50" 
                                 onClick={() => handleEfetivar(transacao.id)}
-                                title="Efetivar Pagamento/Recebimento"
+                                title="Confirmar Pagamento"
                               >
                                 <CheckCircle2 className="w-4 h-4" />
+                              </Button>
+                            ) : (
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                className="h-7 w-7 text-slate-400 hover:text-orange-500 hover:bg-orange-50" 
+                                onClick={() => handleReverter(transacao.id)}
+                                title="Desfazer/Reverter para Previsto"
+                              >
+                                <Undo2 className="w-4 h-4" />
                               </Button>
                             )}
                             

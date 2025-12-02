@@ -19,7 +19,7 @@ import {
   type LancamentoFixo
 } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Pencil, Save, X, Plus } from "lucide-react";
+import { Trash2, Pencil, Save, X, Plus, RefreshCw } from "lucide-react"; // Adicionado RefreshCw
 import { useNavigate } from "react-router-dom";
 
 const Matriz = () => {
@@ -67,6 +67,32 @@ const Matriz = () => {
         title: "Erro ao carregar dados",
         variant: "destructive",
       });
+    }
+  };
+
+  // --- NOVA FUNÇÃO: SINCRONIZAR AGENDA (LIMPEZA DE FANTASMAS) ---
+  const handleSincronizar = async () => {
+    if (!confirm("ATENÇÃO: Isso apagará todas as previsões futuras automáticas e recriará a agenda baseada apenas no que está configurado hoje. \n\nTransações manuais ou já pagas NÃO serão afetadas.\n\nDeseja continuar?")) return;
+    
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/manutencao/sincronizar-agenda`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        toast({ 
+          title: "Agenda Sincronizada!", 
+          description: "Lixos removidos e futuro recalculado com sucesso.",
+          className: "bg-green-600 text-white border-none"
+        });
+        carregarDados();
+      } else {
+        throw new Error();
+      }
+    } catch (error) {
+      toast({ title: "Erro ao sincronizar", variant: "destructive" });
     }
   };
 
@@ -213,13 +239,22 @@ const Matriz = () => {
       <Header showBack={true} backPath="/menu" />
 
       <main className="container mx-auto px-6 py-8">
-        <div className="flex justify-between items-center mb-8">
+        {/* CABEÇALHO ATUALIZADO COM BOTÃO DE SINCRONIZAR */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
              <h2 className="text-2xl font-bold">Configurações</h2>
              <p className="text-muted-foreground">Gerencie categorias e vigência de contas.</p>
           </div>
-          {/* Botão antigo removido pois já está no Header, mas se quiser manter, descomente abaixo: */}
-          {/* <Button variant="outline" onClick={() => navigate("/menu")}>← Voltar ao Menu</Button> */}
+          
+          <Button 
+            variant="outline" 
+            onClick={handleSincronizar}
+            className="gap-2 text-slate-600 border-slate-300 hover:bg-slate-100 hover:text-blue-600 shadow-sm"
+            title="Limpar lixo e recalcular futuro"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Sincronizar Agenda
+          </Button>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8">

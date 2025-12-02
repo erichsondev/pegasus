@@ -99,10 +99,21 @@ const Graficos = () => {
       .sort((a, b) => b.value - a.value);
   }, [transacoes]);
 
+  // ATUALIZADO: Agrupa gastos por descrição (Soma totais) ao invés de listar individualmente
   const maioresGastos = useMemo(() => {
-    return transacoes
+    const gastosMap = new Map<string, number>();
+
+    transacoes
       .filter(t => t.tipo === 'despesa')
-      .sort((a, b) => Number(b.valor) - Number(a.valor))
+      .forEach(t => {
+        const currentTotal = gastosMap.get(t.descricao) || 0;
+        gastosMap.set(t.descricao, currentTotal + Number(t.valor));
+      });
+
+    // Converte o mapa em array, ordena pelo maior valor total e pega o top 5
+    return Array.from(gastosMap.entries())
+      .map(([descricao, valor]) => ({ descricao, valor }))
+      .sort((a, b) => b.valor - a.valor)
       .slice(0, 5);
   }, [transacoes]);
 
@@ -251,11 +262,14 @@ const Graficos = () => {
 
                 <div className="bg-white/50 p-4 rounded-lg border border-slate-100">
                   <h4 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-orange-500" /> Top Gastos
+                    <AlertCircle className="w-4 h-4 text-orange-500" /> Top Gastos (Total no Período)
                   </h4>
                   <div className="space-y-3">
-                    {maioresGastos.map((t) => (
-                      <div key={t.id} className="flex justify-between items-center text-sm">
+                    {/* ATUALIZADO: Agora iteramos usando o 'index' como chave 
+                        porque os itens agregados não têm ID único do banco.
+                    */}
+                    {maioresGastos.map((t, index) => (
+                      <div key={index} className="flex justify-between items-center text-sm">
                          <span className="truncate w-32 text-slate-600" title={t.descricao}>{t.descricao}</span>
                          <span className="font-medium text-slate-800">{formatarMoeda(Number(t.valor))}</span>
                       </div>

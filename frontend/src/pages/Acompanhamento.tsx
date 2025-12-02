@@ -43,11 +43,11 @@ import {
   ChevronLeft, 
   ChevronRight, 
   CheckCircle2,
-  ArrowUpDown, 
-  Filter,
+  ArrowUp,   
+  ArrowDown, 
   Undo2, 
   Layers,
-  CalendarClock // Ícone para o botão de mudar data rápido
+  CalendarClock 
 } from "lucide-react";
 
 const Acompanhamento = () => {
@@ -58,14 +58,11 @@ const Acompanhamento = () => {
   const [mesSelecionado, setMesSelecionado] = useState("");
   const [editandoId, setEditandoId] = useState<number | null>(null);
   
-  // --- ESTADOS DE ORGANIZAÇÃO E FILTRO ---
-  const [ordemAsc, setOrdemAsc] = useState(true); 
-  const [priorizarPendentes, setPriorizarPendentes] = useState(true); 
+  // Filtro de visualização (Sem afetar a ordem interna da lista principal)
   const [filtroTipo, setFiltroTipo] = useState<'todos' | 'receita' | 'despesa'>('todos');
   
   const { toast } = useToast();
 
-  // Função para pegar a data local correta (evita bug de fuso horário -1 dia)
   const getHojeLocal = () => {
     const hoje = new Date();
     const offset = hoje.getTimezoneOffset() * 60000;
@@ -94,29 +91,70 @@ const Acompanhamento = () => {
     }
   }, [mesSelecionado]);
 
-  // --- LÓGICA DE ORGANIZAÇÃO E FILTRAGEM ---
-  const transacoesExibidas = useMemo(() => {
-    let lista = [...transacoes];
-
-    if (filtroTipo !== 'todos') {
-      lista = lista.filter(t => t.tipo === filtroTipo);
-    }
-
-    lista.sort((a, b) => {
-      if (ordemAsc) return a.data.localeCompare(b.data);
-      return b.data.localeCompare(a.data);
+  // --- NOVA FUNÇÃO DE ORDENAÇÃO PADRÃO ---
+  // Aplica a lógica: Receitas > Despesas, depois Data Crescente
+  const aplicarOrdenacaoPadrao = (lista: Transacao[]) => {
+    return lista.sort((a, b) => {
+      // 1. Primária: Tipo (Receita vem antes de Despesa)
+      if (a.tipo === 'receita' && b.tipo !== 'receita') return -1;
+      if (b.tipo === 'receita' && a.tipo !== 'receita') return 1;
+      
+      // 2. Secundária: Data Crescente (Dia 1 -> Dia 31)
+      return a.data.localeCompare(b.data);
     });
+  };
 
-    if (priorizarPendentes) {
-      lista.sort((a, b) => {
-        if (a.status === 'previsto' && b.status === 'efetivado') return -1;
-        if (a.status === 'efetivado' && b.status === 'previsto') return 1;
-        return 0;
-      });
+  const carregarDados = async () => {
+    const [ano, mes] = mesSelecionado.split('-').map(Number);
+    const token = localStorage.getItem("token");
+    const headers = { Authorization: `Bearer ${token}` };
+    
+    try {
+      const [categoriasData, cartoesData] = await Promise.all([
+        obterCategorias(),
+        obterCartoes()
+      ]);
+      setCategorias(categoriasData);
+      setCartoes(cartoesData);
+
+      const resTransacoes = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes?ano=${ano}&mes=${mes}`, { headers });
+      if (resTransacoes.ok) {
+        const dadosBrutos = await resTransacoes.json();
+        // Aplica a ordenação padrão assim que carrega
+        setTransacoes(aplicarOrdenacaoPadrao(dadosBrutos));
+      }
+
+      const resResumo = await fetch(`${import.meta.env.VITE_API_URL}/api/resumo?ano=${ano}&mes=${mes}`, { headers });
+      if (resResumo.ok) setResumo(await resResumo.json());
+
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Erro ao carregar dados", variant: "destructive" });
+    }
+  };
+
+  // --- FUNÇÃO PARA MOVER ITENS MANUALMENTE ---
+  const moverItem = (index: number, direcao: 'cima' | 'baixo') => {
+    if (filtroTipo !== 'todos') {
+      toast({ title: "Atenção", description: "Altere para 'Todos' para reordenar manualmente.", variant: "secondary" });
+      return;
     }
 
-    return lista;
-  }, [transacoes, ordemAsc, priorizarPendentes, filtroTipo]);
+    const novaLista = [...transacoes];
+    const indexAlvo = direcao === 'cima' ? index - 1 : index + 1;
+
+    if (indexAlvo >= 0 && indexAlvo < novaLista.length) {
+      // Troca de posição
+      [novaLista[index], novaLista[indexAlvo]] = [novaLista[indexAlvo], novaLista[index]];
+      setTransacoes(novaLista);
+    }
+  };
+
+  // Filtra visualmente sem perder a ordem do estado principal
+  const transacoesExibidas = useMemo(() => {
+    if (filtroTipo === 'todos') return transacoes;
+    return transacoes.filter(t => t.tipo === filtroTipo);
+  }, [transacoes, filtroTipo]);
 
   const opcoesMeses = useMemo(() => {
     if (!mesSelecionado) return [];
@@ -141,32 +179,6 @@ const Acompanhamento = () => {
     setMesSelecionado(novoValor);
   };
 
-  const carregarDados = async () => {
-    const [ano, mes] = mesSelecionado.split('-').map(Number);
-    const token = localStorage.getItem("token");
-    const headers = { Authorization: `Bearer ${token}` };
-    
-    try {
-      const [categoriasData, cartoesData] = await Promise.all([
-        obterCategorias(),
-        obterCartoes()
-      ]);
-      setCategorias(categoriasData);
-      setCartoes(cartoesData);
-
-      const resTransacoes = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes?ano=${ano}&mes=${mes}`, { headers });
-      if (resTransacoes.ok) setTransacoes(await resTransacoes.json());
-
-      const resResumo = await fetch(`${import.meta.env.VITE_API_URL}/api/resumo?ano=${ano}&mes=${mes}`, { headers });
-      if (resResumo.ok) setResumo(await resResumo.json());
-
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Erro ao carregar dados", variant: "destructive" });
-    }
-  };
-
-  // --- NOVA FUNÇÃO: ALTERAR DATA RÁPIDO ---
   const handleAlterarData = async (id: number, novaData: string) => {
     const atual = transacoes.find(t => t.id === id);
     if (!atual) return;
@@ -174,7 +186,7 @@ const Acompanhamento = () => {
     try {
       await editarTransacao(id, {
         ...atual,
-        data: novaData, // Apenas atualiza a data
+        data: novaData,
         categoria_id: atual.categoria_id ? Number(atual.categoria_id) : undefined,
         cartao_id: atual.cartao_id ? Number(atual.cartao_id) : undefined,
         status: atual.status as 'efetivado' | 'previsto',
@@ -505,7 +517,7 @@ const Acompanhamento = () => {
               {/* Lista */}
               <div className="order-1 lg:order-2 space-y-4">
                 
-                {/* --- HEADER COM FILTROS AVANÇADOS --- */}
+                {/* --- HEADER COM FILTROS SIMPLIFICADOS --- */}
                 <div className="bg-white/60 p-4 rounded-lg shadow-sm border border-slate-100 backdrop-blur-sm flex flex-col gap-3">
                   <div className="flex justify-between items-center">
                     <h3 className="font-bold text-slate-700">Extrato</h3>
@@ -528,7 +540,7 @@ const Acompanhamento = () => {
                     </AlertDialog>
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 justify-between">
                     {/* Botões de Filtro de Tipo */}
                     <div className="flex bg-slate-100 rounded-md p-1 gap-1">
                       <Button 
@@ -556,28 +568,6 @@ const Acompanhamento = () => {
                         <TrendingDown className="w-3 h-3 mr-1" /> Despesas
                       </Button>
                     </div>
-
-                    <div className="flex gap-2 ml-auto">
-                      <Button 
-                        variant={ordemAsc ? "default" : "outline"} 
-                        size="sm" 
-                        onClick={() => setOrdemAsc(!ordemAsc)}
-                        className={`h-8 text-xs ${ordemAsc ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200' : 'text-slate-500'}`}
-                      >
-                        <ArrowUpDown className="w-3 h-3 mr-1" />
-                        {ordemAsc ? "Data (Cresc.)" : "Data (Decresc.)"}
-                      </Button>
-
-                      <Button 
-                        variant={priorizarPendentes ? "default" : "outline"} 
-                        size="sm" 
-                        onClick={() => setPriorizarPendentes(!priorizarPendentes)}
-                        className={`h-8 text-xs ${priorizarPendentes ? 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200' : 'text-slate-500'}`}
-                      >
-                        <Filter className="w-3 h-3 mr-1" />
-                        Pendentes
-                      </Button>
-                    </div>
                   </div>
                 </div>
 
@@ -588,16 +578,40 @@ const Acompanhamento = () => {
                       <p className="text-xs text-slate-400">Use o formulário para começar.</p>
                     </div>
                   ) : (
-                    transacoesExibidas.map(transacao => (
+                    transacoesExibidas.map((transacao, index) => (
                       <div key={transacao.id} className={`group flex items-center justify-between p-4 bg-white/80 border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'opacity-90 bg-white border-l-4 border-l-orange-400' : 'opacity-70 bg-slate-50'}`}>
                         <div className="flex items-center gap-4 overflow-hidden">
+                          {/* BOTÕES DE REORDENAÇÃO MANUAL (VISÍVEL APENAS EM TODOS) */}
+                          {filtroTipo === 'todos' && (
+                            <div className="flex flex-col gap-0.5 -ml-1">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-5 w-5 text-slate-300 hover:text-blue-500 hover:bg-transparent"
+                                onClick={() => moverItem(index, 'cima')}
+                                disabled={index === 0}
+                              >
+                                <ArrowUp className="w-3 h-3" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-5 w-5 text-slate-300 hover:text-blue-500 hover:bg-transparent"
+                                onClick={() => moverItem(index, 'baixo')}
+                                disabled={index === transacoesExibidas.length - 1}
+                              >
+                                <ArrowDown className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
+
                           <div className={`p-2 rounded-full ${transacao.tipo === 'receita' ? 'bg-green-100' : 'bg-red-100'}`}>
                             {transacao.tipo === 'receita' ? <TrendingUp className="w-5 h-5 text-green-600" /> : <TrendingDown className="w-5 h-5 text-red-600" />}
                           </div>
                           <div className="min-w-0">
                             <p className="font-semibold text-slate-800 truncate">{transacao.descricao}</p>
                             <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                              {/* DATA VISUAL CORRIGIDA: dd/mm/aaaa */}
+                              {/* DATA VISUAL: dd/mm/aaaa */}
                               <span className="font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600">
                                 {transacao.data.split('-').reverse().join('/')}
                               </span>
@@ -619,7 +633,7 @@ const Acompanhamento = () => {
                           </p>
                           <div className="flex justify-end gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                             
-                            {/* BOTÃO CALENDÁRIO RÁPIDO - COM ÍCONE E INPUT OCULTO */}
+                            {/* BOTÃO CALENDÁRIO RÁPIDO */}
                             <div className="relative inline-block">
                               <Button 
                                 size="icon" 
@@ -635,11 +649,11 @@ const Acompanhamento = () => {
                                 onChange={(e) => {
                                   if(e.target.value) handleAlterarData(transacao.id, e.target.value);
                                 }}
-                                onClick={(e) => e.stopPropagation()} // Impede clique no item pai se houver
+                                onClick={(e) => e.stopPropagation()} 
                               />
                             </div>
 
-                            {/* LOGICA DO BOTÃO EFETIVAR / REVERTER */}
+                            {/* BOTÃO EFETIVAR / REVERTER */}
                             {transacao.status === 'previsto' ? (
                               <Button 
                                 size="icon" 

@@ -98,6 +98,7 @@ const Acompanhamento = () => {
   // 2. Tipo (Secundária: Receitas no topo do dia)
   const aplicarOrdenacaoPadrao = (lista: Transacao[]) => {
     return lista.sort((a, b) => {
+      // Garante que estamos comparando apenas YYYY-MM-DD
       const dataA = a.data.split('T')[0];
       const dataB = b.data.split('T')[0];
 
@@ -551,7 +552,7 @@ const Acompanhamento = () => {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleLimparMes} className="bg-red-600 hover:bg-red-700">Confirmar</AlertDialogAction>
+                          <AlertDialogAction onClick={handleLimparMes} className="bg-red-600 hover:bg-red-700">Confirmar Exclusão</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
@@ -613,11 +614,11 @@ const Acompanhamento = () => {
                         <div className="flex items-center gap-4 overflow-hidden">
                           {/* BOTÕES DE REORDENAÇÃO MANUAL (VISÍVEL APENAS EM TODOS E SEM PENDENTES ATIVO) */}
                           {filtroTipo === 'todos' && !priorizarPendentes && (
-                            <div className="flex flex-col gap-0.5 -ml-1">
+                            <div className="flex gap-0.5 mr-2">
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
-                                className="h-3.5 w-3.5 text-slate-300 hover:text-blue-500 hover:bg-transparent p-0"
+                                className="h-6 w-6 text-slate-300 hover:text-blue-500 hover:bg-transparent p-0"
                                 onClick={() => moverItem(index, 'cima')}
                                 disabled={index === 0}
                                 title="Mover para Cima"
@@ -627,7 +628,7 @@ const Acompanhamento = () => {
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
-                                className="h-3.5 w-3.5 text-slate-300 hover:text-blue-500 hover:bg-transparent p-0"
+                                className="h-6 w-6 text-slate-300 hover:text-blue-500 hover:bg-transparent p-0"
                                 onClick={() => moverItem(index, 'baixo')}
                                 disabled={index === transacoesExibidas.length - 1}
                                 title="Mover para Baixo"
@@ -665,7 +666,7 @@ const Acompanhamento = () => {
                           </p>
                           <div className="flex justify-end gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                             
-                            {/* BOTÃO CALENDÁRIO RÁPIDO */}
+                            {/* BOTÃO CALENDÁRIO RÁPIDO - COM CORREÇÃO VALUE */}
                             <div className="relative inline-block">
                               <Button 
                                 size="icon" 
@@ -678,6 +679,7 @@ const Acompanhamento = () => {
                               <input 
                                 type="date" 
                                 className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                                value={transacao.data.split('T')[0]} 
                                 onChange={(e) => {
                                   if(e.target.value) handleAlterarData(transacao.id, e.target.value);
                                 }}

@@ -534,15 +534,14 @@ const Acompanhamento = () => {
               {/* Lista */}
               <div className="order-1 lg:order-2 space-y-4">
                 
-                {/* --- HEADER COM FILTROS RESTAURADOS --- */}
+                {/* --- HEADER COM FILTROS SIMPLIFICADOS --- */}
                 <div className="bg-white/60 p-4 rounded-lg shadow-sm border border-slate-100 backdrop-blur-sm flex flex-col gap-3">
                   <div className="flex justify-between items-center">
                     <h3 className="font-bold text-slate-700">Extrato</h3>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        {/* BOTÃO LIMPAR MÊS RESTAURADO */}
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:text-red-700 hover:bg-red-50" title="Apagar TUDO deste mês">
-                          <Trash2 className="w-4 h-4" />
+                        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50 text-xs gap-1">
+                          <Trash2 className="w-3.5 h-3.5" /> Limpar Mês
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -588,12 +587,12 @@ const Acompanhamento = () => {
                     </div>
 
                     <div className="flex gap-2 ml-auto">
-                        {/* BOTÃO PENDENTES RESTAURADO */}
+                        {/* BOTÃO PENDENTES: AGORA AZUL */}
                         <Button 
                           variant={priorizarPendentes ? "default" : "outline"} 
                           size="sm" 
                           onClick={() => setPriorizarPendentes(!priorizarPendentes)}
-                          className={`h-8 text-xs ${priorizarPendentes ? 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200' : 'text-slate-500'}`}
+                          className={`h-8 text-xs ${priorizarPendentes ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200' : 'text-slate-500'}`}
                         >
                           <Filter className="w-3 h-3 mr-1" />
                           Pendentes
@@ -611,10 +610,6 @@ const Acompanhamento = () => {
                   ) : (
                     transacoesExibidas.map((transacao, index) => (
                       <div key={transacao.id} className={`group flex items-center justify-between p-4 bg-white/80 border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'opacity-90 bg-white border-l-4 border-l-blue-500' : 'opacity-70 bg-slate-50'}`}>
-                        {/* MUDANÇA VISUAL (AZUL PARA PREVISTO): 
-                           Antes: border-l-orange-400
-                           Agora: border-l-blue-500 
-                        */}
                         <div className="flex items-center gap-4 overflow-hidden">
                           {/* BOTÕES DE REORDENAÇÃO MANUAL (VISÍVEL APENAS EM TODOS E SEM PENDENTES ATIVO) */}
                           {filtroTipo === 'todos' && !priorizarPendentes && (
@@ -622,18 +617,20 @@ const Acompanhamento = () => {
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
-                                className="h-5 w-5 text-slate-300 hover:text-blue-500 hover:bg-transparent"
+                                className="h-3.5 w-3.5 text-slate-300 hover:text-blue-500 hover:bg-transparent p-0"
                                 onClick={() => moverItem(index, 'cima')}
                                 disabled={index === 0}
+                                title="Mover para Cima"
                               >
                                 <ArrowUp className="w-3 h-3" />
                               </Button>
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
-                                className="h-5 w-5 text-slate-300 hover:text-blue-500 hover:bg-transparent"
+                                className="h-3.5 w-3.5 text-slate-300 hover:text-blue-500 hover:bg-transparent p-0"
                                 onClick={() => moverItem(index, 'baixo')}
                                 disabled={index === transacoesExibidas.length - 1}
+                                title="Mover para Baixo"
                               >
                                 <ArrowDown className="w-3 h-3" />
                               </Button>
@@ -646,7 +643,7 @@ const Acompanhamento = () => {
                           <div className="min-w-0">
                             <p className="font-semibold text-slate-800 truncate">{transacao.descricao}</p>
                             <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                              {/* DATA VISUAL CORRIGIDA: dd/mm/aaaa (Split correto da ISO string) */}
+                              {/* DATA VISUAL CORRIGIDA: dd/mm/aaaa */}
                               <span className="font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600">
                                 {transacao.data.split('T')[0].split('-').reverse().join('/')}
                               </span>
@@ -655,7 +652,6 @@ const Acompanhamento = () => {
                               </Badge>
                               {transacao.status === 'previsto' && (
                                 <span className="text-blue-500 font-medium flex items-center gap-1">
-                                  {/* CORRIGIDO: Ícone e Texto AZUL */}
                                   <AlertCircle className="w-3 h-3" /> Previsto
                                 </span>
                               )}

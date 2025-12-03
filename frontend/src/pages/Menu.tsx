@@ -182,7 +182,8 @@ const Menu = () => {
         <div className="mb-10 grid gap-3">
             {proximosVencimentos.length > 0 ? (
                 proximosVencimentos.map(item => (
-                    <div key={item.id} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all border-l-4 border-l-orange-400">
+                    // ATUALIZADO: Borda agora é AZUL (blue-500) para padronizar com "Previsto"
+                    <div key={item.id} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all border-l-4 border-l-blue-500">
                         <div className="flex items-center gap-3">
                             <div className="flex flex-col items-center justify-center bg-slate-100 rounded-lg p-2 min-w-[50px]">
                                 <span className="text-xs text-slate-500 uppercase font-bold">{new Date(item.data).toLocaleString('pt-BR', { month: 'short' }).replace('.', '')}</span>

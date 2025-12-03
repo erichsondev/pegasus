@@ -13,7 +13,8 @@ import {
   Lightbulb, 
   CalendarClock,
   TrendingUp,
-  TrendingDown
+  ArrowUpCircle,   // Novo ícone para Receita
+  ArrowDownCircle  // Novo ícone para Despesa
 } from "lucide-react";
 import { obterResumo, obterNomeUsuario } from "@/lib/storage";
 
@@ -64,7 +65,6 @@ const Menu = () => {
           setSaldo(0);
         }
 
-        // Busca transações do mês para filtrar os próximos vencimentos
         const token = localStorage.getItem("token");
         if(token) {
             const ano = hoje.getFullYear();
@@ -74,13 +74,11 @@ const Menu = () => {
             });
             if(res.ok) {
                 const lista: TransacaoResumo[] = await res.json();
-                // Filtra apenas o que é futuro (data >= hoje) e previsto
                 const dataHojeStr = hoje.toISOString().split('T')[0];
-                // Tipagem frouxa (any) para status, pois a interface TransacaoResumo não tem status
                 const pendentes = lista
                     .filter(t => t.data >= dataHojeStr && (t as any).status === 'previsto')
                     .sort((a, b) => a.data.localeCompare(b.data))
-                    .slice(0, 3); // Pega só os top 3
+                    .slice(0, 3);
                 setProximosVencimentos(pendentes);
             }
         }
@@ -120,57 +118,77 @@ const Menu = () => {
             </div>
         </div>
 
-        {/* Card Principal: Saldo + Resumo Rápido */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-            {/* Card Saldo (Ocupa 2 colunas no desktop) */}
-            <div className="lg:col-span-2 relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white shadow-xl shadow-blue-200 hover:shadow-2xl transition-shadow duration-300">
-              <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-3xl animate-pulse"></div>
-              <div className="absolute -left-10 -bottom-10 h-40 w-40 rounded-full bg-white/10 blur-3xl"></div>
+        {/* CARD PRINCIPAL UNIFICADO (AZUL DEGRADÊ) */}
+        <div className="mb-10">
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white shadow-xl shadow-blue-200 hover:shadow-2xl transition-all duration-300">
               
-              <div className="relative z-10 flex flex-col justify-between h-full">
-                <div>
-                    <p className="flex items-center gap-2 text-blue-100 font-medium mb-2">
-                    <Wallet className="w-5 h-5" /> Saldo Previsto
-                    </p>
-                    <h2 className="text-4xl font-bold tracking-tight">
-                    {saldo !== null ? formatarMoeda(saldo) : "..."}
-                    </h2>
-                </div>
-                <div className="mt-6 flex gap-3">
-                   <Button 
-                     onClick={() => navigate("/acompanhamento")}
-                     className="bg-white text-blue-600 hover:bg-blue-50 border-none font-semibold shadow-md"
-                   >
-                     Ver Extrato
-                   </Button>
-                </div>
-              </div>
-            </div>
+              {/* Efeitos de fundo (bolhas) */}
+              <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-white/10 blur-3xl animate-pulse pointer-events-none"></div>
+              <div className="absolute -left-20 -bottom-20 h-80 w-80 rounded-full bg-white/10 blur-3xl pointer-events-none"></div>
+              
+              <div className="relative z-10 flex flex-col gap-6">
+                
+                {/* Linha Superior: Saldos */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Saldo Atual */}
+                    <div>
+                        <p className="flex items-center gap-2 text-blue-100 font-medium mb-1 text-sm uppercase tracking-wide">
+                           <Wallet className="w-4 h-4" /> Saldo Atual
+                        </p>
+                        <h2 className="text-4xl font-bold tracking-tight">
+                           {saldo !== null ? formatarMoeda(saldo) : "..."}
+                        </h2>
+                        <p className="text-xs text-blue-200 mt-1">Disponível agora</p>
+                    </div>
 
-            {/* Coluna Lateral: Resumo do Mês */}
-            <div className="flex flex-col gap-4">
-                <Card className="flex-1 border-none shadow-sm glass-card flex items-center p-4">
-                    <div className="p-3 bg-green-100 rounded-full mr-4">
-                        <TrendingUp className="w-6 h-6 text-green-600" />
-                    </div>
-                    <div>
-                        <p className="text-xs text-slate-500 font-bold uppercase">Entradas (Mês)</p>
-                        <p className="text-lg font-bold text-green-600">
-                            {resumoMes ? formatarMoeda(resumoMes.totalReceitasEfetivadas + resumoMes.totalReceitasPrevistas) : "..."}
+                    {/* Saldo Previsto */}
+                    <div className="md:border-l md:border-white/20 md:pl-8">
+                        <p className="flex items-center gap-2 text-blue-100 font-medium mb-1 text-sm uppercase tracking-wide">
+                           <TrendingUp className="w-4 h-4" /> Saldo Previsto
                         </p>
+                        <h2 className="text-4xl font-bold tracking-tight text-white/90">
+                           {resumoMes ? formatarMoeda(resumoMes.saldoFinalProjetado) : "..."}
+                        </h2>
+                        <p className="text-xs text-blue-200 mt-1">Ao final do mês</p>
                     </div>
-                </Card>
-                <Card className="flex-1 border-none shadow-sm glass-card flex items-center p-4">
-                    <div className="p-3 bg-red-100 rounded-full mr-4">
-                        <TrendingDown className="w-6 h-6 text-red-600" />
+                </div>
+
+                {/* Divisor */}
+                <div className="h-px bg-white/20 w-full"></div>
+
+                {/* Linha Inferior: Entradas/Saídas + Botão */}
+                <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                    <div className="flex w-full md:w-auto gap-8 justify-between md:justify-start">
+                        {/* Entradas */}
+                        <div>
+                            <p className="text-xs text-blue-100 font-bold uppercase mb-1 flex items-center gap-1">
+                               <ArrowUpCircle className="w-3.5 h-3.5 text-green-300" /> Receitas
+                            </p>
+                            <p className="text-lg font-bold text-green-50">
+                               {resumoMes ? formatarMoeda(resumoMes.totalReceitasEfetivadas + resumoMes.totalReceitasPrevistas) : "..."}
+                            </p>
+                        </div>
+
+                        {/* Saídas */}
+                        <div>
+                            <p className="text-xs text-blue-100 font-bold uppercase mb-1 flex items-center gap-1">
+                               <ArrowDownCircle className="w-3.5 h-3.5 text-red-300" /> Despesas
+                            </p>
+                            <p className="text-lg font-bold text-red-50">
+                               {resumoMes ? formatarMoeda(resumoMes.totalDespesasEfetivadas + resumoMes.totalDespesasPrevistas) : "..."}
+                            </p>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-xs text-slate-500 font-bold uppercase">Saídas (Mês)</p>
-                        <p className="text-lg font-bold text-red-600">
-                            {resumoMes ? formatarMoeda(resumoMes.totalDespesasEfetivadas + resumoMes.totalDespesasPrevistas) : "..."}
-                        </p>
-                    </div>
-                </Card>
+
+                    <Button 
+                     onClick={() => navigate("/acompanhamento")}
+                     className="bg-white text-blue-600 hover:bg-blue-50 border-none font-semibold shadow-md w-full md:w-auto"
+                    >
+                     Ver Extrato Completo
+                    </Button>
+                </div>
+
+              </div>
             </div>
         </div>
 
@@ -182,7 +200,6 @@ const Menu = () => {
         <div className="mb-10 grid gap-3">
             {proximosVencimentos.length > 0 ? (
                 proximosVencimentos.map(item => (
-                    // ATUALIZADO: Borda agora é AZUL (blue-500) para padronizar com "Previsto"
                     <div key={item.id} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all border-l-4 border-l-blue-500">
                         <div className="flex items-center gap-3">
                             <div className="flex flex-col items-center justify-center bg-slate-100 rounded-lg p-2 min-w-[50px]">

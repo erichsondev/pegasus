@@ -76,6 +76,7 @@ const Menu = () => {
                 const lista: TransacaoResumo[] = await res.json();
                 // Filtra apenas o que é futuro (data >= hoje) e previsto
                 const dataHojeStr = hoje.toISOString().split('T')[0];
+                // Tipagem frouxa (any) para status, pois a interface TransacaoResumo não tem status
                 const pendentes = lista
                     .filter(t => t.data >= dataHojeStr && (t as any).status === 'previsto')
                     .sort((a, b) => a.data.localeCompare(b.data))
@@ -287,6 +288,3 @@ const Menu = () => {
 };
 
 export default Menu;
-```
-
-Agora seu sistema tem um menu poderoso com dashboard completo e uma tela de configurações segura!

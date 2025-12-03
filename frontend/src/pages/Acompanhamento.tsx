@@ -47,7 +47,8 @@ import {
   ArrowDown, 
   Undo2, 
   Layers,
-  CalendarClock 
+  CalendarClock,
+  Filter
 } from "lucide-react";
 
 const Acompanhamento = () => {
@@ -58,7 +59,8 @@ const Acompanhamento = () => {
   const [mesSelecionado, setMesSelecionado] = useState("");
   const [editandoId, setEditandoId] = useState<number | null>(null);
   
-  // Filtro de visualização (Sem afetar a ordem interna da lista principal)
+  // Filtros Visuais
+  const [priorizarPendentes, setPriorizarPendentes] = useState(true); 
   const [filtroTipo, setFiltroTipo] = useState<'todos' | 'receita' | 'despesa'>('todos');
   
   const { toast } = useToast();
@@ -91,16 +93,22 @@ const Acompanhamento = () => {
     }
   }, [mesSelecionado]);
 
-  // --- NOVA FUNÇÃO DE ORDENAÇÃO PADRÃO ---
-  // Aplica a lógica: Receitas > Despesas, depois Data Crescente
+  // --- ORDENAÇÃO PADRÃO CORRIGIDA ---
+  // 1. Data (Primária)
+  // 2. Tipo (Secundária: Receitas no topo do dia)
   const aplicarOrdenacaoPadrao = (lista: Transacao[]) => {
     return lista.sort((a, b) => {
-      // 1. Primária: Tipo (Receita vem antes de Despesa)
+      const dataA = a.data.split('T')[0];
+      const dataB = b.data.split('T')[0];
+
+      // 1. Primária: Data Crescente
+      if (dataA !== dataB) return dataA.localeCompare(dataB);
+
+      // 2. Secundária: Tipo (Receita antes de Despesa no mesmo dia)
       if (a.tipo === 'receita' && b.tipo !== 'receita') return -1;
       if (b.tipo === 'receita' && a.tipo !== 'receita') return 1;
       
-      // 2. Secundária: Data Crescente (Dia 1 -> Dia 31)
-      return a.data.localeCompare(b.data);
+      return 0;
     });
   };
 
@@ -120,7 +128,7 @@ const Acompanhamento = () => {
       const resTransacoes = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes?ano=${ano}&mes=${mes}`, { headers });
       if (resTransacoes.ok) {
         const dadosBrutos = await resTransacoes.json();
-        // Aplica a ordenação padrão assim que carrega
+        // Aplica a nova ordenação ao carregar
         setTransacoes(aplicarOrdenacaoPadrao(dadosBrutos));
       }
 
@@ -133,10 +141,9 @@ const Acompanhamento = () => {
     }
   };
 
-  // --- FUNÇÃO PARA MOVER ITENS MANUALMENTE ---
   const moverItem = (index: number, direcao: 'cima' | 'baixo') => {
-    if (filtroTipo !== 'todos') {
-      toast({ title: "Atenção", description: "Altere para 'Todos' para reordenar manualmente.", variant: "secondary" });
+    if (filtroTipo !== 'todos' || priorizarPendentes) {
+      toast({ title: "Atenção", description: "Desative filtros ('Todos' e 'Pendentes') para reordenar manualmente.", variant: "secondary" });
       return;
     }
 
@@ -144,17 +151,26 @@ const Acompanhamento = () => {
     const indexAlvo = direcao === 'cima' ? index - 1 : index + 1;
 
     if (indexAlvo >= 0 && indexAlvo < novaLista.length) {
-      // Troca de posição
       [novaLista[index], novaLista[indexAlvo]] = [novaLista[indexAlvo], novaLista[index]];
       setTransacoes(novaLista);
     }
   };
 
-  // Filtra visualmente sem perder a ordem do estado principal
+  // Filtra visualmente
   const transacoesExibidas = useMemo(() => {
-    if (filtroTipo === 'todos') return transacoes;
-    return transacoes.filter(t => t.tipo === filtroTipo);
-  }, [transacoes, filtroTipo]);
+    let lista = filtroTipo === 'todos' ? [...transacoes] : transacoes.filter(t => t.tipo === filtroTipo);
+
+    // Filtro de Pendentes (Visual apenas, não reordena o banco, apenas joga pro topo)
+    if (priorizarPendentes) {
+      lista.sort((a, b) => {
+        if (a.status === 'previsto' && b.status === 'efetivado') return -1;
+        if (a.status === 'efetivado' && b.status === 'previsto') return 1;
+        return 0; // Mantém a ordem original (Data) entre status iguais
+      });
+    }
+
+    return lista;
+  }, [transacoes, filtroTipo, priorizarPendentes]);
 
   const opcoesMeses = useMemo(() => {
     if (!mesSelecionado) return [];
@@ -277,7 +293,6 @@ const Acompanhamento = () => {
 
   const handleEditar = (transacao: Transacao) => {
     setEditandoId(transacao.id);
-    // IMPORTANTE: Garantir que a data carregada para edição esteja no formato YYYY-MM-DD
     const dataFormatada = transacao.data.split('T')[0];
     setFormData({
       descricao: transacao.descricao,
@@ -519,12 +534,13 @@ const Acompanhamento = () => {
               {/* Lista */}
               <div className="order-1 lg:order-2 space-y-4">
                 
-                {/* --- HEADER COM FILTROS SIMPLIFICADOS --- */}
+                {/* --- HEADER COM FILTROS RESTAURADOS --- */}
                 <div className="bg-white/60 p-4 rounded-lg shadow-sm border border-slate-100 backdrop-blur-sm flex flex-col gap-3">
                   <div className="flex justify-between items-center">
                     <h3 className="font-bold text-slate-700">Extrato</h3>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
+                        {/* BOTÃO LIMPAR MÊS RESTAURADO */}
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:text-red-700 hover:bg-red-50" title="Apagar TUDO deste mês">
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -570,6 +586,19 @@ const Acompanhamento = () => {
                         <TrendingDown className="w-3 h-3 mr-1" /> Despesas
                       </Button>
                     </div>
+
+                    <div className="flex gap-2 ml-auto">
+                        {/* BOTÃO PENDENTES RESTAURADO */}
+                        <Button 
+                          variant={priorizarPendentes ? "default" : "outline"} 
+                          size="sm" 
+                          onClick={() => setPriorizarPendentes(!priorizarPendentes)}
+                          className={`h-8 text-xs ${priorizarPendentes ? 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200' : 'text-slate-500'}`}
+                        >
+                          <Filter className="w-3 h-3 mr-1" />
+                          Pendentes
+                        </Button>
+                    </div>
                   </div>
                 </div>
 
@@ -581,10 +610,14 @@ const Acompanhamento = () => {
                     </div>
                   ) : (
                     transacoesExibidas.map((transacao, index) => (
-                      <div key={transacao.id} className={`group flex items-center justify-between p-4 bg-white/80 border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'opacity-90 bg-white border-l-4 border-l-orange-400' : 'opacity-70 bg-slate-50'}`}>
+                      <div key={transacao.id} className={`group flex items-center justify-between p-4 bg-white/80 border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'opacity-90 bg-white border-l-4 border-l-blue-500' : 'opacity-70 bg-slate-50'}`}>
+                        {/* MUDANÇA VISUAL (AZUL PARA PREVISTO): 
+                           Antes: border-l-orange-400
+                           Agora: border-l-blue-500 
+                        */}
                         <div className="flex items-center gap-4 overflow-hidden">
-                          {/* BOTÕES DE REORDENAÇÃO MANUAL (VISÍVEL APENAS EM TODOS) */}
-                          {filtroTipo === 'todos' && (
+                          {/* BOTÕES DE REORDENAÇÃO MANUAL (VISÍVEL APENAS EM TODOS E SEM PENDENTES ATIVO) */}
+                          {filtroTipo === 'todos' && !priorizarPendentes && (
                             <div className="flex flex-col gap-0.5 -ml-1">
                               <Button 
                                 variant="ghost" 
@@ -613,7 +646,7 @@ const Acompanhamento = () => {
                           <div className="min-w-0">
                             <p className="font-semibold text-slate-800 truncate">{transacao.descricao}</p>
                             <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                              {/* DATA VISUAL: dd/mm/aaaa */}
+                              {/* DATA VISUAL CORRIGIDA: dd/mm/aaaa (Split correto da ISO string) */}
                               <span className="font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600">
                                 {transacao.data.split('T')[0].split('-').reverse().join('/')}
                               </span>
@@ -621,7 +654,8 @@ const Acompanhamento = () => {
                                 {transacao.nome_categoria}
                               </Badge>
                               {transacao.status === 'previsto' && (
-                                <span className="text-orange-500 font-medium flex items-center gap-1">
+                                <span className="text-blue-500 font-medium flex items-center gap-1">
+                                  {/* CORRIGIDO: Ícone e Texto AZUL */}
                                   <AlertCircle className="w-3 h-3" /> Previsto
                                 </span>
                               )}

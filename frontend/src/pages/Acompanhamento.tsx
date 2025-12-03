@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -51,6 +51,49 @@ import {
   Filter
 } from "lucide-react";
 
+// --- SUB-COMPONENTE: BOTÃO DE DATA INTELIGENTE ---
+// Resolve o problema de "rolar o mês" disparar alterações indesejadas
+const QuickDateButton = ({ currentData, onUpdate }: { currentData: string, onUpdate: (novaData: string) => void }) => {
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Formata para YYYY-MM-DD para o input aceitar
+  const dataFormatada = currentData.split('T')[0];
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const novaData = e.target.value;
+    if (!novaData) return;
+
+    // Cancela timer anterior se o usuário ainda estiver mexendo (rolando mês)
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+    // Espera 800ms após a última mexida para salvar
+    timeoutRef.current = setTimeout(() => {
+      onUpdate(novaData);
+    }, 800);
+  };
+
+  return (
+    <div className="relative inline-block">
+      <Button 
+        size="icon" 
+        variant="ghost" 
+        className="h-7 w-7 text-slate-400 hover:text-blue-600"
+        title="Alterar Data"
+      >
+        <CalendarClock className="w-4 h-4" />
+      </Button>
+      <input 
+        type="date" 
+        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+        defaultValue={dataFormatada} // Usa defaultValue para não travar a UI nativa
+        key={dataFormatada} // Força atualização se a prop mudar externamente
+        onChange={handleChange}
+        onClick={(e) => e.stopPropagation()} 
+      />
+    </div>
+  );
+};
+
 const Acompanhamento = () => {
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -98,7 +141,6 @@ const Acompanhamento = () => {
   // 2. Tipo (Secundária: Receitas no topo do dia)
   const aplicarOrdenacaoPadrao = (lista: Transacao[]) => {
     return lista.sort((a, b) => {
-      // Garante que estamos comparando apenas YYYY-MM-DD
       const dataA = a.data.split('T')[0];
       const dataB = b.data.split('T')[0];
 
@@ -129,7 +171,6 @@ const Acompanhamento = () => {
       const resTransacoes = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes?ano=${ano}&mes=${mes}`, { headers });
       if (resTransacoes.ok) {
         const dadosBrutos = await resTransacoes.json();
-        // Aplica a nova ordenação ao carregar
         setTransacoes(aplicarOrdenacaoPadrao(dadosBrutos));
       }
 
@@ -161,12 +202,11 @@ const Acompanhamento = () => {
   const transacoesExibidas = useMemo(() => {
     let lista = filtroTipo === 'todos' ? [...transacoes] : transacoes.filter(t => t.tipo === filtroTipo);
 
-    // Filtro de Pendentes (Visual apenas, não reordena o banco, apenas joga pro topo)
     if (priorizarPendentes) {
       lista.sort((a, b) => {
         if (a.status === 'previsto' && b.status === 'efetivado') return -1;
         if (a.status === 'efetivado' && b.status === 'previsto') return 1;
-        return 0; // Mantém a ordem original (Data) entre status iguais
+        return 0; 
       });
     }
 
@@ -666,26 +706,11 @@ const Acompanhamento = () => {
                           </p>
                           <div className="flex justify-end gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                             
-                            {/* BOTÃO CALENDÁRIO RÁPIDO - COM CORREÇÃO VALUE */}
-                            <div className="relative inline-block">
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-7 w-7 text-slate-400 hover:text-blue-600"
-                                title="Alterar Data"
-                              >
-                                <CalendarClock className="w-4 h-4" />
-                              </Button>
-                              <input 
-                                type="date" 
-                                className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-                                value={transacao.data.split('T')[0]} 
-                                onChange={(e) => {
-                                  if(e.target.value) handleAlterarData(transacao.id, e.target.value);
-                                }}
-                                onClick={(e) => e.stopPropagation()} 
-                              />
-                            </div>
+                            {/* BOTÃO CALENDÁRIO RÁPIDO (COM DEBOUNCE E CORREÇÃO) */}
+                            <QuickDateButton 
+                              currentData={transacao.data} 
+                              onUpdate={(novaData) => handleAlterarData(transacao.id, novaData)} 
+                            />
 
                             {/* BOTÃO EFETIVAR / REVERTER */}
                             {transacao.status === 'previsto' ? (

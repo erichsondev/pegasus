@@ -1,9 +1,10 @@
 /*
  * =================================================================
- * PEGASUS FINANCE 2.0 - BACKEND DEFINITIVO (CORREÇÃO DE PRAZO)
+ * PEGASUS FINANCE 2.0 - BACKEND DEFINITIVO (SAFE SYNC)
  * =================================================================
  * * LOG DE MUDANÇAS:
- * 1. Aumento do horizonte de previsão: De 12 meses para 60 meses (5 anos).
+ * 1. Sincronização segura: Agora apenas PREENCHE meses vazios, não apaga edições.
+ * 2. Horizonte estendido para 60 meses.
  */
 
 // --- 1. IMPORTAÇÕES E CONFIGURAÇÃO ---
@@ -81,6 +82,8 @@ async function gerarLancamentosPrevistos(ano, mes, usuarioId, lancamentoFixoIdEs
         if (lancamentosFixos.length === 0) return;
 
         for (const fixo of lancamentosFixos) {
+            // Verifica duplicidade (Compatível com Legado e Novo)
+            // IMPORTANTE: Isso protege suas edições manuais. Se já existe, não mexe.
             const existeQuery = `
                 SELECT 1 FROM transacoes 
                 WHERE (lancamento_fixo_id = $1 OR (lancamento_fixo_id IS NULL AND descricao = $2))
@@ -199,8 +202,9 @@ const rotasProtegidas = express.Router();
 rotasProtegidas.use(autenticarToken);
 
 
-// --- ATUALIZAÇÃO INTELIGENTE (HÍBRIDA) ---
+// --- ATUALIZAÇÃO CIRÚRGICA (Ao editar um item específico) ---
 async function atualizarAgendaFuturaEspecifica(dataReferencia, usuarioId, lancamentoFixoId, descricaoOriginal = null) {
+    // AQUI MANTEMOS A LIMPEZA: Ao editar um item ESPECÍFICO, você quer que ele mude.
     let queryDelete = `
         DELETE FROM transacoes 
         WHERE gerado_automaticamente = TRUE 
@@ -214,7 +218,6 @@ async function atualizarAgendaFuturaEspecifica(dataReferencia, usuarioId, lancam
     await db.query(queryDelete, paramsDelete);
 
     const dataInicioObj = new Date(dataReferencia + 'T00:00:00');
-    // ATUALIZADO: Gera para os próximos 60 meses (5 anos)
     for (let i = 0; i < 60; i++) {
         let dataAlvo = new Date(dataInicioObj);
         dataAlvo.setMonth(dataAlvo.getMonth() + i);
@@ -223,30 +226,23 @@ async function atualizarAgendaFuturaEspecifica(dataReferencia, usuarioId, lancam
 }
 
 
-// --- ROTA DE MANUTENÇÃO (LIMPEZA TOTAL) ---
+// --- ROTA DE MANUTENÇÃO (VERSÃO SEGURA: PREENCHE LACUNAS) ---
 rotasProtegidas.post('/manutencao/sincronizar-agenda', asyncHandler(async (req, res) => {
     const usuarioId = req.usuario.id;
-    const hoje = new Date().toISOString().split('T')[0];
-
-    // 1. Limpa TODO o futuro automático
-    await db.query(`
-        DELETE FROM transacoes 
-        WHERE usuario_id = $1 
-        AND gerado_automaticamente = TRUE 
-        AND status = 'previsto' 
-        AND data >= $2
-    `, [usuarioId, hoje]);
-
-    // 2. Regenera agenda (60 meses)
+    
+    // NOTA: Removemos o DELETE geral. 
+    // Agora a função apenas passa mês a mês. Se faltar, ela cria. Se já existir (editado), ela respeita.
+    
     const dataInicioObj = new Date();
-    // ATUALIZADO: Loop de 60 meses para garantir cobertura até 2030+
+    // Garante 60 meses à frente
     for (let i = 0; i < 60; i++) {
         let dataAlvo = new Date(dataInicioObj);
         dataAlvo.setMonth(dataAlvo.getMonth() + i);
+        // O null força a verificar TODOS os itens da matriz
         await gerarLancamentosPrevistos(dataAlvo.getFullYear(), dataAlvo.getMonth() + 1, usuarioId, null);
     }
 
-    res.status(200).json({ message: "Agenda limpa e regenerada (5 anos)." });
+    res.status(200).json({ message: "Agenda estendida para 5 anos (Edições preservadas)." });
 }));
 
 

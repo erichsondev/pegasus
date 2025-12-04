@@ -150,8 +150,8 @@ const Graficos = () => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   };
 
+  // REMOVIDO bg-slate-50 para o fundo azulzinho aparecer
   return (
-    // REMOVIDO bg-slate-50 para o fundo azulzinho aparecer
     <div className="min-h-screen pb-20">
       <Header showBack={true} backPath="/menu" />
 

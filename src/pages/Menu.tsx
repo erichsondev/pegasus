@@ -94,7 +94,7 @@ const Menu = () => {
     <div className="min-h-screen pb-10">
       <Navigation />
       <div className="max-w-7xl mx-auto pt-24 p-6 space-y-8 animate-fade-in">
-        {/* Cabeçalho Hero no Padrão Benefícios 360 */}
+        {/* Cabeçalho Hero Translúcido */}
         <div className="text-white bg-black/50 p-8 rounded-2xl backdrop-blur-md border border-white/10 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold mb-2">
@@ -115,63 +115,88 @@ const Menu = () => {
           </div>
         </div>
 
-        {/* Card Principal Unificado */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 p-6 md:p-8 text-white shadow-xl">
-          <div className="relative z-10 flex flex-col gap-6">
+        {/* Card Principal em Glassmorphism com Luz Ambiente Sutil */}
+        <Card className="relative overflow-hidden rounded-2xl glass-card shadow-lg border-t-2 border-t-primary/60">
+          {/* Reflexo sutil no canto superior esquerdo */}
+          <div className="pointer-events-none absolute -top-24 -left-24 h-64 w-64 rounded-full bg-primary/15 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-24 -right-24 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl" />
+
+          <CardContent className="relative z-10 p-6 md:p-8 flex flex-col gap-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div>
-                <p className="flex items-center gap-2 text-blue-100 font-medium mb-1 text-sm uppercase tracking-wide">
-                  <Wallet className="w-4 h-4" /> Saldo Atual
-                </p>
-                <h2 className="text-4xl font-bold tracking-tight">
-                  {saldo !== null ? formatarMoeda(saldo) : "..."}
-                </h2>
-                <p className="text-xs text-blue-200 mt-1">Disponível agora (efetivado)</p>
+              <div className="flex items-start gap-4">
+                <div className="p-3 rounded-xl bg-primary/15 border border-primary/20 text-primary shrink-0 mt-1">
+                  <Wallet className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-muted-foreground font-semibold mb-1 text-xs uppercase tracking-wider">
+                    Saldo Atual
+                  </p>
+                  <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
+                    {saldo !== null ? formatarMoeda(saldo) : "..."}
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1">Disponível agora (efetivado)</p>
+                </div>
               </div>
 
-              <div className="md:border-l md:border-white/20 md:pl-8">
-                <p className="flex items-center gap-2 text-blue-100 font-medium mb-1 text-sm uppercase tracking-wide">
-                  <TrendingUp className="w-4 h-4" /> Saldo Previsto
-                </p>
-                <h2 className="text-4xl font-bold tracking-tight text-white/95">
-                  {resumoMes ? formatarMoeda(resumoMes.saldoFinalProjetado) : "..."}
-                </h2>
-                <p className="text-xs text-blue-200 mt-1">Projeção ao final do mês</p>
+              <div className="md:border-l md:border-border/60 md:pl-8 flex items-start gap-4">
+                <div className="p-3 rounded-xl bg-indigo-500/15 border border-indigo-500/20 text-indigo-500 dark:text-indigo-400 shrink-0 mt-1">
+                  <TrendingUp className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-muted-foreground font-semibold mb-1 text-xs uppercase tracking-wider">
+                    Saldo Previsto
+                  </p>
+                  <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
+                    {resumoMes ? formatarMoeda(resumoMes.saldoFinalProjetado) : "..."}
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1">Projeção ao final do mês</p>
+                </div>
               </div>
             </div>
 
-            <div className="h-px bg-white/20 w-full"></div>
+            <div className="h-px bg-border/60 w-full"></div>
 
-            <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-              <div className="flex w-full md:w-auto gap-8 justify-between md:justify-start">
-                <div>
-                  <p className="text-xs text-blue-100 font-bold uppercase mb-1 flex items-center gap-1">
-                    <ArrowUpCircle className="w-3.5 h-3.5 text-green-300" /> Receitas do Mês
-                  </p>
-                  <p className="text-lg font-bold text-green-50">
-                    {resumoMes ? formatarMoeda(resumoMes.totalReceitasEfetivadas + resumoMes.totalReceitasPrevistas) : "..."}
-                  </p>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <div className="flex flex-wrap w-full md:w-auto gap-8 justify-between md:justify-start">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-green-500/15 text-green-600 dark:text-green-400">
+                    <ArrowUpCircle className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground font-semibold uppercase">
+                      Receitas do Mês
+                    </p>
+                    <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                      {resumoMes ? formatarMoeda(resumoMes.totalReceitasEfetivadas + resumoMes.totalReceitasPrevistas) : "..."}
+                    </p>
+                  </div>
                 </div>
 
-                <div>
-                  <p className="text-xs text-blue-100 font-bold uppercase mb-1 flex items-center gap-1">
-                    <ArrowDownCircle className="w-3.5 h-3.5 text-red-300" /> Despesas do Mês
-                  </p>
-                  <p className="text-lg font-bold text-red-50">
-                    {resumoMes ? formatarMoeda(resumoMes.totalDespesasEfetivadas + resumoMes.totalDespesasPrevistas) : "..."}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-red-500/15 text-red-600 dark:text-red-400">
+                    <ArrowDownCircle className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground font-semibold uppercase">
+                      Despesas do Mês
+                    </p>
+                    <p className="text-lg font-bold text-red-600 dark:text-red-400">
+                      {resumoMes ? formatarMoeda(resumoMes.totalDespesasEfetivadas + resumoMes.totalDespesasPrevistas) : "..."}
+                    </p>
+                  </div>
                 </div>
               </div>
 
               <Button
+                variant="secondary"
                 onClick={() => navigate("/acompanhamento")}
-                className="bg-white text-blue-600 hover:bg-blue-50 border-none font-semibold shadow-md w-full md:w-auto"
+                className="font-semibold border border-border/60 hover:border-primary/50 w-full md:w-auto gap-2"
               >
-                Ver Extrato Completo
+                Ver Extrato Completo <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Próximos Vencimentos */}
         <div>
@@ -185,7 +210,7 @@ const Menu = () => {
                 <Card key={item.id} className="glass-card border-l-4 border-l-primary">
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="flex flex-col items-center justify-center bg-muted rounded-lg p-2 min-w-[52px]">
+                      <div className="flex flex-col items-center justify-center bg-muted/70 rounded-lg p-2 min-w-[52px]">
                         <span className="text-xs text-muted-foreground uppercase font-bold">
                           {new Date(item.data).toLocaleString('pt-BR', { month: 'short', timeZone: 'UTC' }).replace('.', '')}
                         </span>

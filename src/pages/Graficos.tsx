@@ -188,12 +188,14 @@ const Graficos = () => {
               <span className="text-2xl font-bold">{formatarMoeda(kpis.despesas)}</span>
             </CardContent>
           </Card>
-          <Card className="bg-primary text-primary-foreground shadow-md">
+            <Card className="glass-card border-l-4 border-l-primary">
             <CardContent className="p-6 flex flex-col gap-1">
-              <span className="text-sm font-medium opacity-90 flex items-center gap-2">
-                <DollarSign className="w-4 h-4" /> Saldo Líquido
+              <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-primary" /> Saldo Líquido
               </span>
-              <span className="text-2xl font-bold">{formatarMoeda(kpis.saldo)}</span>
+              <span className={`text-2xl font-bold ${kpis.saldo >= 0 ? 'text-primary' : 'text-red-600 dark:text-red-400'}`}>
+                {formatarMoeda(kpis.saldo)}
+              </span>
             </CardContent>
           </Card>
           <Card className="glass-card">

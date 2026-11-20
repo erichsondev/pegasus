@@ -19,9 +19,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
+  obterTransacoes,
+  obterResumo,
   adicionarTransacao,
   editarTransacao,
   removerTransacao,
+  efetivarTransacao,
+  preverTransacao,
   obterCategorias,
   obterCartoes,
   type Transacao,
@@ -51,22 +55,14 @@ import {
   Filter
 } from "lucide-react";
 
-// --- SUB-COMPONENTE: BOTÃO DE DATA INTELIGENTE ---
-// Resolve o problema de "rolar o mês" disparar alterações indesejadas
 const QuickDateButton = ({ currentData, onUpdate }: { currentData: string, onUpdate: (novaData: string) => void }) => {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Formata para YYYY-MM-DD para o input aceitar
   const dataFormatada = currentData.split('T')[0];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const novaData = e.target.value;
     if (!novaData) return;
-
-    // Cancela timer anterior se o usuário ainda estiver mexendo (rolando mês)
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-
-    // Espera 800ms após a última mexida para salvar
     timeoutRef.current = setTimeout(() => {
       onUpdate(novaData);
     }, 800);
@@ -74,19 +70,14 @@ const QuickDateButton = ({ currentData, onUpdate }: { currentData: string, onUpd
 
   return (
     <div className="relative inline-block">
-      <Button 
-        size="icon" 
-        variant="ghost" 
-        className="h-7 w-7 text-slate-400 hover:text-blue-600"
-        title="Alterar Data"
-      >
+      <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-blue-600" title="Alterar Data">
         <CalendarClock className="w-4 h-4" />
       </Button>
       <input 
         type="date" 
         className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-        defaultValue={dataFormatada} // Usa defaultValue para não travar a UI nativa
-        key={dataFormatada} // Força atualização se a prop mudar externamente
+        defaultValue={dataFormatada}
+        key={dataFormatada}
         onChange={handleChange}
         onClick={(e) => e.stopPropagation()} 
       />
@@ -100,9 +91,8 @@ const Acompanhamento = () => {
   const [cartoes, setCartoes] = useState<Cartao[]>([]);
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [mesSelecionado, setMesSelecionado] = useState("");
-  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
   
-  // Filtros Visuais
   const [priorizarPendentes, setPriorizarPendentes] = useState(true); 
   const [filtroTipo, setFiltroTipo] = useState<'todos' | 'receita' | 'despesa'>('todos');
   
@@ -131,35 +121,22 @@ const Acompanhamento = () => {
   }, []);
 
   useEffect(() => {
-    if (mesSelecionado) {
-      carregarDados();
-    }
+    if (mesSelecionado) carregarDados();
   }, [mesSelecionado]);
 
-  // --- ORDENAÇÃO PADRÃO CORRIGIDA ---
-  // 1. Data (Primária)
-  // 2. Tipo (Secundária: Receitas no topo do dia)
   const aplicarOrdenacaoPadrao = (lista: Transacao[]) => {
     return lista.sort((a, b) => {
       const dataA = a.data.split('T')[0];
       const dataB = b.data.split('T')[0];
-
-      // 1. Primária: Data Crescente
       if (dataA !== dataB) return dataA.localeCompare(dataB);
-
-      // 2. Secundária: Tipo (Receita antes de Despesa no mesmo dia)
       if (a.tipo === 'receita' && b.tipo !== 'receita') return -1;
       if (b.tipo === 'receita' && a.tipo !== 'receita') return 1;
-      
       return 0;
     });
   };
 
   const carregarDados = async () => {
     const [ano, mes] = mesSelecionado.split('-').map(Number);
-    const token = localStorage.getItem("token");
-    const headers = { Authorization: `Bearer ${token}` };
-    
     try {
       const [categoriasData, cartoesData] = await Promise.all([
         obterCategorias(),
@@ -168,14 +145,11 @@ const Acompanhamento = () => {
       setCategorias(categoriasData);
       setCartoes(cartoesData);
 
-      const resTransacoes = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes?ano=${ano}&mes=${mes}`, { headers });
-      if (resTransacoes.ok) {
-        const dadosBrutos = await resTransacoes.json();
-        setTransacoes(aplicarOrdenacaoPadrao(dadosBrutos));
-      }
+      const resTransacoes = await obterTransacoes(ano, mes);
+      setTransacoes(aplicarOrdenacaoPadrao(resTransacoes));
 
-      const resResumo = await fetch(`${import.meta.env.VITE_API_URL}/api/resumo?ano=${ano}&mes=${mes}`, { headers });
-      if (resResumo.ok) setResumo(await resResumo.json());
+      const resResumo = await obterResumo(ano, mes);
+      setResumo(resResumo);
 
     } catch (error) {
       console.error(error);
@@ -188,20 +162,16 @@ const Acompanhamento = () => {
       toast({ title: "Atenção", description: "Desative filtros ('Todos' e 'Pendentes') para reordenar manualmente.", variant: "secondary" });
       return;
     }
-
     const novaLista = [...transacoes];
     const indexAlvo = direcao === 'cima' ? index - 1 : index + 1;
-
     if (indexAlvo >= 0 && indexAlvo < novaLista.length) {
       [novaLista[index], novaLista[indexAlvo]] = [novaLista[indexAlvo], novaLista[index]];
       setTransacoes(novaLista);
     }
   };
 
-  // Filtra visualmente
   const transacoesExibidas = useMemo(() => {
     let lista = filtroTipo === 'todos' ? [...transacoes] : transacoes.filter(t => t.tipo === filtroTipo);
-
     if (priorizarPendentes) {
       lista.sort((a, b) => {
         if (a.status === 'previsto' && b.status === 'efetivado') return -1;
@@ -209,7 +179,6 @@ const Acompanhamento = () => {
         return 0; 
       });
     }
-
     return lista;
   }, [transacoes, filtroTipo, priorizarPendentes]);
 
@@ -236,20 +205,18 @@ const Acompanhamento = () => {
     setMesSelecionado(novoValor);
   };
 
-  const handleAlterarData = async (id: number, novaData: string) => {
+  const handleAlterarData = async (id: string, novaData: string) => {
     const atual = transacoes.find(t => t.id === id);
     if (!atual) return;
-
     try {
       await editarTransacao(id, {
-        ...atual,
+        descricao: atual.descricao,
+        valor: atual.valor,
         data: novaData,
-        categoria_id: atual.categoria_id ? Number(atual.categoria_id) : undefined,
-        cartao_id: atual.cartao_id ? Number(atual.cartao_id) : undefined,
-        status: atual.status as 'efetivado' | 'previsto',
-        tipo: atual.tipo as 'receita' | 'despesa'
+        categoria_id: atual.categoria_id || undefined,
+        cartao_id: atual.cartao_id || undefined,
+        status: atual.status,
       });
-      
       toast({ title: "Data alterada!", className: "bg-blue-600 text-white border-none" });
       carregarDados();
     } catch (error) {
@@ -259,15 +226,14 @@ const Acompanhamento = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     const transacao = {
       descricao: formData.descricao,
       valor: parseFloat(formData.valor),
       data: formData.data,
       status: formData.efetivado ? 'efetivado' as const : 'previsto' as const,
       tipo: formData.tipo,
-      categoria_id: formData.categoria_id ? parseInt(formData.categoria_id) : undefined,
-      cartao_id: formData.cartao_id ? parseInt(formData.cartao_id) : undefined,
+      categoria_id: formData.categoria_id || undefined,
+      cartao_id: formData.cartao_id || undefined,
     };
 
     try {
@@ -294,39 +260,21 @@ const Acompanhamento = () => {
     }
   };
 
-  const handleEfetivar = async (id: number) => {
+  const handleEfetivar = async (id: string) => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes/${id}/efetivar`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        toast({ title: "Pagamento Confirmado!", className: "bg-green-600 text-white border-none" });
-        carregarDados();
-      } else {
-        throw new Error();
-      }
+      await efetivarTransacao(id);
+      toast({ title: "Pagamento Confirmado!", className: "bg-green-600 text-white border-none" });
+      carregarDados();
     } catch (error) {
       toast({ title: "Erro ao efetivar", variant: "destructive" });
     }
   };
 
-  const handleReverter = async (id: number) => {
+  const handleReverter = async (id: string) => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes/${id}/prever`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        toast({ title: "Transação Revertida!", description: "Voltou para status 'Previsto'.", className: "bg-orange-500 text-white border-none" });
-        carregarDados();
-      } else {
-        throw new Error();
-      }
+      await preverTransacao(id);
+      toast({ title: "Transação Revertida!", description: "Voltou para status 'Previsto'.", className: "bg-orange-500 text-white border-none" });
+      carregarDados();
     } catch (error) {
       toast({ title: "Erro ao reverter", variant: "destructive" });
     }
@@ -340,14 +288,14 @@ const Acompanhamento = () => {
       valor: transacao.valor.toString(),
       data: dataFormatada,
       tipo: transacao.tipo,
-      categoria_id: transacao.categoria_id?.toString() || "",
-      cartao_id: transacao.cartao_id?.toString() || "",
+      categoria_id: transacao.categoria_id || "",
+      cartao_id: transacao.cartao_id || "",
       efetivado: transacao.status === 'efetivado'
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleRemover = async (id: number) => {
+  const handleRemover = async (id: string) => {
     try {
       await removerTransacao(id);
       carregarDados();
@@ -374,10 +322,8 @@ const Acompanhamento = () => {
   return (
     <div className="min-h-screen pb-20">
       <Header showBack={true} backPath="/menu" />
-
       <main className="container mx-auto px-4 md:px-6 py-8 animate-fade-in">
         
-        {/* Controle de Mês */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8 bg-white/70 backdrop-blur-md p-4 rounded-xl shadow-sm border border-white/50">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">Acompanhamento</h2>
@@ -474,7 +420,6 @@ const Acompanhamento = () => {
           <TabsContent value="lancamentos">
             <div className="grid lg:grid-cols-[350px_1fr] gap-8">
               
-              {/* Formulário */}
               <div className="order-2 lg:order-1">
                 <Card className={`sticky top-24 transition-all glass-card ${editandoId ? 'border-blue-500 ring-2 ring-blue-100' : ''}`}>
                   <CardHeader className="pb-3">
@@ -498,7 +443,6 @@ const Acompanhamento = () => {
                         </div>
                         <div>
                           <Label className="text-xs">Data</Label>
-                          {/* CSS trick: hide default calendar icon so it's not cut off */}
                           <Input 
                             type="date" 
                             value={formData.data} 
@@ -525,7 +469,7 @@ const Acompanhamento = () => {
                           <Select value={formData.categoria_id} onValueChange={(v) => setFormData({ ...formData, categoria_id: v })}>
                             <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
                             <SelectContent>
-                              {categorias.map(cat => (<SelectItem key={cat.id} value={cat.id.toString()}>{cat.nome}</SelectItem>))}
+                              {categorias.map(cat => (<SelectItem key={cat.id} value={cat.id}>{cat.nome}</SelectItem>))}
                             </SelectContent>
                           </Select>
                         </div>
@@ -536,7 +480,7 @@ const Acompanhamento = () => {
                           <Select value={formData.cartao_id} onValueChange={(v) => setFormData({ ...formData, cartao_id: v })}>
                             <SelectTrigger className="mt-1"><SelectValue placeholder="Nenhum" /></SelectTrigger>
                             <SelectContent>
-                              {cartoes.map(cartao => (<SelectItem key={cartao.id} value={cartao.id.toString()}>{cartao.nome}</SelectItem>))}
+                              {cartoes.map(cartao => (<SelectItem key={cartao.id} value={cartao.id}>{cartao.nome}</SelectItem>))}
                             </SelectContent>
                           </Select>
                         </div>
@@ -572,10 +516,8 @@ const Acompanhamento = () => {
                 </Card>
               </div>
 
-              {/* Lista */}
               <div className="order-1 lg:order-2 space-y-4">
                 
-                {/* --- HEADER COM FILTROS SIMPLIFICADOS --- */}
                 <div className="bg-white/60 p-4 rounded-lg shadow-sm border border-slate-100 backdrop-blur-sm flex flex-col gap-3">
                   <div className="flex justify-between items-center">
                     <h3 className="font-bold text-slate-700">Extrato</h3>
@@ -599,7 +541,6 @@ const Acompanhamento = () => {
                   </div>
 
                   <div className="flex flex-wrap gap-2 justify-between">
-                    {/* Botões de Filtro de Tipo */}
                     <div className="flex bg-slate-100 rounded-md p-1 gap-1">
                       <Button 
                         variant="ghost" 
@@ -628,7 +569,6 @@ const Acompanhamento = () => {
                     </div>
 
                     <div className="flex gap-2 ml-auto">
-                        {/* BOTÃO PENDENTES: AGORA AZUL */}
                         <Button 
                           variant={priorizarPendentes ? "default" : "outline"} 
                           size="sm" 
@@ -652,7 +592,6 @@ const Acompanhamento = () => {
                     transacoesExibidas.map((transacao, index) => (
                       <div key={transacao.id} className={`group flex items-center justify-between p-4 bg-white/80 border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'opacity-90 bg-white border-l-4 border-l-blue-500' : 'opacity-70 bg-slate-50'}`}>
                         <div className="flex items-center gap-4 overflow-hidden">
-                          {/* BOTÕES DE REORDENAÇÃO MANUAL (VISÍVEL APENAS EM TODOS E SEM PENDENTES ATIVO) */}
                           {filtroTipo === 'todos' && !priorizarPendentes && (
                             <div className="flex gap-0.5 mr-2">
                               <Button 
@@ -684,7 +623,6 @@ const Acompanhamento = () => {
                           <div className="min-w-0">
                             <p className="font-semibold text-slate-800 truncate">{transacao.descricao}</p>
                             <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                              {/* DATA VISUAL CORRIGIDA: dd/mm/aaaa */}
                               <span className="font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600">
                                 {transacao.data.split('T')[0].split('-').reverse().join('/')}
                               </span>
@@ -705,36 +643,19 @@ const Acompanhamento = () => {
                             {transacao.tipo === 'despesa' ? '-' : '+'}{formatarMoeda(transacao.valor)}
                           </p>
                           <div className="flex justify-end gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            
-                            {/* BOTÃO CALENDÁRIO RÁPIDO (COM DEBOUNCE E CORREÇÃO) */}
                             <QuickDateButton 
                               currentData={transacao.data} 
                               onUpdate={(novaData) => handleAlterarData(transacao.id, novaData)} 
                             />
-
-                            {/* BOTÃO EFETIVAR / REVERTER */}
                             {transacao.status === 'previsto' ? (
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-7 w-7 text-slate-400 hover:text-green-600 hover:bg-green-50" 
-                                onClick={() => handleEfetivar(transacao.id)}
-                                title="Confirmar Pagamento"
-                              >
+                              <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-green-600 hover:bg-green-50" onClick={() => handleEfetivar(transacao.id)} title="Confirmar Pagamento">
                                 <CheckCircle2 className="w-4 h-4" />
                               </Button>
                             ) : (
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-7 w-7 text-slate-400 hover:text-orange-500 hover:bg-orange-50" 
-                                onClick={() => handleReverter(transacao.id)}
-                                title="Desfazer/Reverter para Previsto"
-                              >
+                              <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-orange-500 hover:bg-orange-50" onClick={() => handleReverter(transacao.id)} title="Desfazer/Reverter para Previsto">
                                 <Undo2 className="w-4 h-4" />
                               </Button>
                             )}
-                            
                             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEditar(transacao)}>
                               <Pencil className="w-3.5 h-3.5 text-slate-400 hover:text-blue-600" />
                             </Button>

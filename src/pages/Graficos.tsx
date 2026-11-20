@@ -4,23 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-// IMPORTAÇÕES ATUALIZADAS: Adicionado ComposedChart e Line para misturar os gráficos
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
 import { ArrowUpCircle, ArrowDownCircle, DollarSign, TrendingUp, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { obterTransacoes, type Transacao } from "@/lib/storage";
 
-// Cores modernas para os gráficos
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
-
-interface Transacao {
-  id: number;
-  descricao: string;
-  valor: number;
-  tipo: 'receita' | 'despesa';
-  status: string;
-  data: string;
-  nome_categoria: string;
-}
 
 const Graficos = () => {
   const [mesInicio, setMesInicio] = useState("");
@@ -48,24 +37,16 @@ const Graficos = () => {
 
   const carregarDados = async () => {
     try {
-      const token = localStorage.getItem("token");
       const start = new Date(mesInicio + "-02");
       const end = new Date(mesFim + "-02");
       let todasTransacoes: Transacao[] = [];
 
-      // Loop para buscar todos os meses do intervalo
       for (let d = new Date(start); d <= end; d.setMonth(d.getMonth() + 1)) {
         const ano = d.getFullYear();
         const mes = d.getMonth() + 1;
         
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/transacoes?ano=${ano}&mes=${mes}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-          const dados = await response.json();
-          todasTransacoes = [...todasTransacoes, ...dados];
-        }
+        const dados = await obterTransacoes(ano, mes);
+        todasTransacoes = [...todasTransacoes, ...dados];
       }
       setTransacoes(todasTransacoes);
     } catch (error) {
@@ -116,7 +97,6 @@ const Graficos = () => {
       .slice(0, 5);
   }, [transacoes]);
 
-  // ATUALIZADO: Lógica de cálculo do Saldo Acumulado mês a mês
   const dadosEvolucao = useMemo(() => {
     const map = new Map();
     transacoes.forEach(t => {
@@ -127,7 +107,6 @@ const Graficos = () => {
       else atual.despesas += Number(t.valor);
     });
 
-    // Ordena cronologicamente para garantir que o acúmulo siga a linha do tempo correta
     const ordenados = Array.from(map.values()).sort((a, b) => a.mes.localeCompare(b.mes));
 
     let saldoAcumulado = 0;
@@ -165,7 +144,6 @@ const Graficos = () => {
   return (
     <div className="min-h-screen pb-20">
       <Header showBack={true} backPath="/menu" />
-
       <main className="container mx-auto px-4 md:px-6 py-8 animate-fade-in">
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8 bg-white/70 p-4 rounded-xl shadow-sm border border-white/50 backdrop-blur-md">
@@ -233,7 +211,6 @@ const Graficos = () => {
             </CardHeader>
             <CardContent className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                {/* ATUALIZADO: Trocado AreaChart por ComposedChart para misturar linhas e áreas */}
                 <ComposedChart data={dadosEvolucao} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorReceitas" x1="0" y1="0" x2="0" y2="1">
@@ -248,12 +225,10 @@ const Graficos = () => {
                   <XAxis dataKey="mes" stroke="#94a3b8" fontSize={12} />
                   <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(val) => `R$ ${val/1000}k`} />
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                  {/* Tooltip aprimorado para formatar perfeitamente todos os valores das linhas/áreas */}
                   <RechartsTooltip formatter={(value: any) => formatarMoeda(Number(value))} />
                   <Legend />
                   <Area type="monotone" dataKey="receitas" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorReceitas)" name="Receitas" />
                   <Area type="monotone" dataKey="despesas" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorDespesas)" name="Despesas" />
-                  {/* INJEÇÃO DA NOVA LINHA DE ACÚMULO DE CAPITAL */}
                   <Line type="monotone" dataKey="acumulado" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} name="Patrimônio Acumulado" />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -277,7 +252,7 @@ const Graficos = () => {
 
                 <div className="bg-white/50 p-4 rounded-lg border border-slate-100">
                   <h4 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-orange-500" /> Top Gastos (Total no Período)
+                    <AlertCircle className="w-4 h-4 text-orange-500" /> Top Gastos
                   </h4>
                   <div className="space-y-3">
                     {maioresGastos.map((t, index) => (

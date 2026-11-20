@@ -1,28 +1,30 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LogOut, User, ArrowLeft } from "lucide-react";
-import { fazerLogout, obterNomeUsuario } from "@/lib/storage";
+import { fazerLogout } from "@/lib/storage";
+import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo.png";
 
 interface HeaderProps {
-  showBack?: boolean; // Nova propriedade opcional
-  backPath?: string;  // Para onde ele volta? (Opcional, padrão é voltar 1 passo)
+  showBack?: boolean;
+  backPath?: string;
 }
 
 export const Header = ({ showBack = false, backPath }: HeaderProps) => {
   const navigate = useNavigate();
-  const nomeUsuario = obterNomeUsuario();
+  const { user } = useAuth();
+  
+  const nomeUsuario = user?.user_metadata?.full_name?.split(" ")[0] || user?.email?.split("@")[0] || "Usuário";
 
-  const handleLogout = () => {
-    fazerLogout();
-    navigate("/");
+  const handleLogout = async () => {
+    await fazerLogout();
   };
 
   const handleBack = () => {
     if (backPath) {
       navigate(backPath);
     } else {
-      navigate(-1); // Volta para a página anterior no histórico
+      navigate(-1);
     }
   };
 
@@ -31,7 +33,6 @@ export const Header = ({ showBack = false, backPath }: HeaderProps) => {
       <div className="container mx-auto px-4 py-3 md:py-4 flex justify-between items-center">
         
         <div className="flex items-center gap-3 md:gap-4">
-          {/* Botão de Voltar Condicional */}
           {showBack && (
             <Button 
               variant="ghost" 
@@ -50,7 +51,6 @@ export const Header = ({ showBack = false, backPath }: HeaderProps) => {
               alt="Pegasus Finance" 
               className="w-9 h-9 md:w-10 md:h-10 object-contain drop-shadow-sm" 
             />
-            {/* Esconde o nome em mobile se tiver o botão voltar pra economizar espaço */}
             <h1 className={`text-xl md:text-2xl font-bold text-slate-800 tracking-tight ${showBack ? 'hidden md:block' : 'block'}`}>
               Pegasus Finance
             </h1>

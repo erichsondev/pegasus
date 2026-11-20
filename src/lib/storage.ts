@@ -389,10 +389,17 @@ export const obterLancamentosFixos = async (): Promise<LancamentoFixo[]> => {
       else pagina++;
     }
 
-    return todosDados.map(l => ({
-      ...l,
-      nome_categoria: l.categorias?.nome || 'Sem categoria'
-    }));
+    return todosDados
+      .map(l => ({
+        ...l,
+        nome_categoria: l.categorias?.nome || 'Sem categoria'
+      }))
+      .sort((a, b) => {
+        if (a.tipo === 'receita' && b.tipo !== 'receita') return -1;
+        if (b.tipo === 'receita' && a.tipo !== 'receita') return 1;
+        if (a.dia_do_mes !== b.dia_do_mes) return a.dia_do_mes - b.dia_do_mes;
+        return a.descricao.localeCompare(b.descricao);
+      });
   } catch (error) {
     console.error('Erro ao obter lançamentos fixos:', error);
     return [];

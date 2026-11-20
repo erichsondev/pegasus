@@ -1,27 +1,25 @@
 # 🐎 Pegasus Finance
 
-A robust Fullstack Personal Finance Platform designed for speed and automation. Pegasus helps users track expenses, manage recurring transactions, and visualize their financial health through interactive dashboards.
+Uma plataforma *Serverless* de Gestão Financeira Pessoal projetada para velocidade, automação e clareza visual. O Pegasus ajuda você a registrar despesas, gerenciar transações recorrentes e visualizar sua saúde financeira através de dashboards interativos com um design moderno (*Glassmorphism*).
 
 ## 🚀 Live Demo
-**https://pegasus-taupe.vercel.app/**
+**[https://pegasus-taupe.vercel.app/](https://pegasus-taupe.vercel.app/)**
 
-## 🛠 Tech Stack
-- **Frontend:** React + Vite, Tailwind CSS, Shadcn/UI, Lucide React.
-- **Backend:** Node.js (Express), JWT Authentication, Bcrypt.
-- **Database:** PostgreSQL (Supabase) with Connection Pooling (Transaction Mode).
-- **Deployment:** Vercel (Frontend), Render (Backend).
+## 🛠 Stack Tecnológica
+- **Frontend:** React + Vite, TypeScript, Tailwind CSS, Shadcn/UI, Lucide React.
+- **Backend as a Service (BaaS):** Supabase (PostgreSQL).
+- **Autenticação:** Supabase Auth.
+- **Gráficos:** Recharts.
+- **Deploy:** Vercel.
 
-## ✨ Key Features
-- **Smart Recurring Transactions:** An automated engine that handles monthly expenses and income.
-- **Secure Auth:** Industry-standard JWT authentication for data privacy.
-- **Real-time Dashboards:** Interactive charts and summaries for quick financial insights.
-- **Responsive Design:** Fully optimized for both desktop and mobile devices.
+## ✨ Principais Funcionalidades
+- **Motor de Recorrência Inteligente:** Um sistema que projeta, sincroniza e gera lançamentos fixos futuros diretamente no frontend de forma otimizada.
+- **Segurança Nativa (RLS):** Utilização de Row Level Security (RLS) no Supabase, garantindo total privacidade e isolamento dos dados de cada usuário.
+- **Dashboards em Tempo Real:** Gráficos interativos para análise de evolução patrimonial, DRE gerencial e métricas de fechamento de mês.
+- **UI/UX Premium:** Interface totalmente responsiva construída com um tema translúcido (efeito *glass*) para uma experiência fluida e imersiva.
 
-## 🔧 Installation & Local Setup
-1. Clone the repo: `git clone https://github.com/erichsondev/pegasus.git`
-2. Install dependencies: `npm install`
-3. Configure your `.env` file with your Supabase credentials.
-4. Run the development server: `npm run dev`
+## 🔧 Instalação e Execução Local
 
-## 🛡️ Security Note
-This project implements security best practices such as environment variable protection, password hashing with Bcrypt, and protected API routes.
+1. Clone o repositório: 
+```bash
+git clone [https://github.com/erichsondev/pegasus.git](https://github.com/erichsondev/pegasus.git)

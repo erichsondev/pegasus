@@ -53,7 +53,9 @@ import {
   Layers,
   CalendarClock,
   Filter,
-  LayoutDashboard
+  LayoutDashboard,
+  ArrowUpCircle,
+  ArrowDownCircle
 } from "lucide-react";
 
 const QuickDateButton = ({ currentData, onUpdate }: { currentData: string; onUpdate: (novaData: string) => void }) => {
@@ -214,6 +216,7 @@ const Acompanhamento = () => {
         descricao: atual.descricao,
         valor: atual.valor,
         data: novaData,
+        tipo: atual.tipo,
         categoria_id: atual.categoria_id || undefined,
         cartao_id: atual.cartao_id || undefined,
         status: atual.status,
@@ -320,11 +323,14 @@ const Acompanhamento = () => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   };
 
+  const totalReceitasMes = resumo ? resumo.totalReceitasEfetivadas + resumo.totalReceitasPrevistas : 0;
+  const totalDespesasMes = resumo ? resumo.totalDespesasEfetivadas + resumo.totalDespesasPrevistas : 0;
+
   return (
     <div className="min-h-screen pb-20">
       <Navigation title="Acompanhamento" />
-      <div className="max-w-7xl mx-auto pt-24 p-6 space-y-8 animate-fade-in">
-        {/* Cabeçalho Hero no Padrão Benefícios 360 */}
+      <div className="max-w-7xl mx-auto pt-24 p-6 space-y-6 animate-fade-in">
+        {/* Cabeçalho Hero Translúcido */}
         <div className="text-white bg-black/50 p-8 rounded-2xl backdrop-blur-md border border-white/10 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="flex items-center gap-6">
             <div className="p-4 bg-primary/20 rounded-full shrink-0">
@@ -360,6 +366,88 @@ const Acompanhamento = () => {
             </Button>
           </div>
         </div>
+
+        {/* Faixa de Resumo Rápido do Mês Selecionado (Estilo Início) */}
+        <Card className="relative overflow-hidden rounded-2xl glass-card shadow-md border-t-2 border-t-primary/50">
+          <div className="pointer-events-none absolute -top-20 -left-20 h-48 w-48 rounded-full bg-primary/10 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 -right-20 h-48 w-48 rounded-full bg-indigo-500/10 blur-3xl" />
+
+          <CardContent className="relative z-10 p-5 md:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Saldo Atual */}
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-primary/15 border border-primary/20 text-primary shrink-0 mt-0.5">
+                  <Wallet className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Saldo Atual
+                  </p>
+                  <p className="text-2xl font-bold tracking-tight text-foreground">
+                    {resumo ? formatarMoeda(resumo.saldoAtualAcumulado) : "..."}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Efetivado no mês
+                  </p>
+                </div>
+              </div>
+
+              {/* Saldo Previsto */}
+              <div className="sm:border-l sm:border-border/60 sm:pl-6 flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-indigo-500/15 border border-indigo-500/20 text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Saldo Previsto
+                  </p>
+                  <p className={`text-2xl font-bold tracking-tight ${resumo && resumo.saldoFinalProjetado < 0 ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>
+                    {resumo ? formatarMoeda(resumo.saldoFinalProjetado) : "..."}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Projeção ao fim do mês
+                  </p>
+                </div>
+              </div>
+
+              {/* Receitas do Mês */}
+              <div className="lg:border-l lg:border-border/60 lg:pl-6 flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-green-500/15 border border-green-500/20 text-green-600 dark:text-green-400 shrink-0 mt-0.5">
+                  <ArrowUpCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Receitas do Mês
+                  </p>
+                  <p className="text-2xl font-bold tracking-tight text-green-600 dark:text-green-400">
+                    {resumo ? formatarMoeda(totalReceitasMes) : "..."}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {resumo ? `${formatarMoeda(resumo.totalReceitasEfetivadas)} recebido` : "..."}
+                  </p>
+                </div>
+              </div>
+
+              {/* Despesas do Mês */}
+              <div className="sm:border-l sm:border-border/60 sm:pl-6 flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-red-500/15 border border-red-500/20 text-red-600 dark:text-red-400 shrink-0 mt-0.5">
+                  <ArrowDownCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Despesas do Mês
+                  </p>
+                  <p className="text-2xl font-bold tracking-tight text-red-600 dark:text-red-400">
+                    {resumo ? formatarMoeda(totalDespesasMes) : "..."}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {resumo ? `${formatarMoeda(resumo.totalDespesasEfetivadas)} pago` : "..."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card className="glass-card shadow-md">
           <Tabs defaultValue="lancamentos" className="w-full">

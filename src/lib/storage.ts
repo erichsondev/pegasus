@@ -62,6 +62,7 @@ const montarDataSegura = (ano: number, mesIndex: number, diaDesejado: number): s
 export const gerarProjecoesLancamentoFixo = async (
   userId: string,
   lancamento: {
+    id?: string;
     descricao: string;
     valor: number;
     tipo: 'receita' | 'despesa';
@@ -75,12 +76,12 @@ export const gerarProjecoesLancamentoFixo = async (
   const hoje = new Date();
   const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
 
-  const [anoIni, mesIni] = lancamento.data_inicio.split('-').map(Number);
+  const [anoIni, mesIni] = lancamento.data_inicio.split('T')[0].split('-').map(Number);
   const inicioVig = new Date(anoIni, mesIni - 1, 1);
 
   let fimVig: Date;
   if (lancamento.data_fim) {
-    const [anoFim, mesFim] = lancamento.data_fim.split('-').map(Number);
+    const [anoFim, mesFim] = lancamento.data_fim.split('T')[0].split('-').map(Number);
     fimVig = new Date(anoFim, mesFim - 1, 1);
   } else {
     fimVig = new Date(hoje.getFullYear() + 5, 11, 1);
@@ -107,6 +108,7 @@ export const gerarProjecoesLancamentoFixo = async (
       if (!apenasFuturoAPartirDeHoje || dataStr >= hojeStr) {
         novasTransacoes.push({
           user_id: userId,
+          lancamento_fixo_id: lancamento.id || null,
           categoria_id: lancamento.categoria_id || null,
           descricao: lancamento.descricao,
           valor: Number(lancamento.valor) || 0,
@@ -407,6 +409,21 @@ export const adicionarLancamentoFixo = async (lancamento: {
     data_fim: lancamento.data_fim || null,
     user_id: userId,
   };
+
+  const { data, error } = await supabase
+    .from('lancamentos_fixos')
+    .insert([payload])
+    .select()
+    .single();
+  if (error) throw error;
+
+  const qtdGerada = await gerarProjecoesLancamentoFixo(
+    userId,
+    { ...payload, id: data.id },
+    false
+  );
+  return qtdGerada;
+};
 
   const { error } = await supabase.from('lancamentos_fixos').insert([payload]);
   if (error) throw error;

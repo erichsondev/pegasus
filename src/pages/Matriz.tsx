@@ -72,19 +72,20 @@ const Matriz = () => {
 
   const handleSincronizar = async () => {
     if (!user) return;
-    if (!confirm("ATENÇÃO: Isso apagará todas as previsões futuras automáticas e recriará a agenda baseada apenas no que está configurado hoje.\n\nTransações manuais ou já pagas NÃO serão afetadas.\n\nDeseja continuar?")) return;
+    if (!confirm("ATENÇÃO: Isso apagará todas as previsões futuras e recriará a agenda baseada apenas nas regras configuradas hoje.\n\nTransações já pagas/efetivadas NÃO serão afetadas.\n\nDeseja continuar?")) return;
 
     setSyncing(true);
     try {
       const hoje = new Date();
       const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
 
-      const { error: errDelete } = await supabase
+      const { data: apagadas, error: errDelete } = await supabase
         .from('transacoes')
         .delete()
         .eq('user_id', user.id)
         .eq('status', 'previsto')
-        .gte('data', hojeStr);
+        .gte('data', hojeStr)
+        .select('id');
 
       if (errDelete) throw errDelete;
 
@@ -98,7 +99,7 @@ const Matriz = () => {
 
       toast({
         title: "Agenda Sincronizada!",
-        description: `Foram recriadas ${totalCriados} transações futuras.`
+        description: `${apagadas?.length || 0} previsões antigas removidas e ${totalCriados} novas geradas.`
       });
       carregarDados();
     } catch (error) {
@@ -166,27 +167,48 @@ const Matriz = () => {
 
   const handleSalvarLancamento = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
 
     try {
       if (editandoId) {
+        const payloadAtualizado = {
+          descricao: novoLancamento.descricao.trim(),
+          valor: parseFloat(novoLancamento.valor),
+          tipo: novoLancamento.tipo,
+          dia_do_mes: parseInt(novoLancamento.dia_do_mes),
+          categoria_id: novoLancamento.categoria_id || null,
+          data_inicio: novoLancamento.data_inicio,
+          data_fim: novoLancamento.data_fim || null
+        };
+
         const { error } = await supabase
           .from('lancamentos_fixos')
-          .update({
-            descricao: novoLancamento.descricao.trim(),
-            valor: parseFloat(novoLancamento.valor),
-            tipo: novoLancamento.tipo,
-            dia_do_mes: parseInt(novoLancamento.dia_do_mes),
-            categoria_id: novoLancamento.categoria_id || null,
-            data_inicio: novoLancamento.data_inicio,
-            data_fim: novoLancamento.data_fim || null
-          })
+          .update(payloadAtualizado)
           .eq('id', editandoId)
-          .eq('user_id', user?.id);
+          .eq('user_id', user.id);
 
         if (error) throw error;
+
+        const hoje = new Date();
+        const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+
+        await supabase
+          .from('transacoes')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('status', 'previsto')
+          .gte('data', hojeStr)
+          .eq('lancamento_fixo_id', editandoId);
+
+        const qtdNovas = await gerarProjecoesLancamentoFixo(
+          user.id,
+          { ...payloadAtualizado, id: editandoId },
+          true
+        );
+
         toast({
           title: "Lançamento atualizado!",
-          description: "Clique em 'Sincronizar Agenda' se desejar recalcular as parcelas futuras."
+          description: `Agenda futura recalculada automaticamente (${qtdNovas} parcelas previstas).`
         });
       } else {
         const qtdGerada = await adicionarLancamentoFixo({
@@ -213,11 +235,23 @@ const Matriz = () => {
   };
 
   const handleRemoverLancamento = async (id: string) => {
-    if (!confirm("Isso removerá a regra recorrente. Deseja continuar?")) return;
+    if (!user) return;
+    if (!confirm("Isso removerá a regra recorrente e suas previsões futuras ainda não pagas. Deseja continuar?")) return;
     try {
+      const hoje = new Date();
+      const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+
+      await supabase
+        .from('transacoes')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('status', 'previsto')
+        .gte('data', hojeStr)
+        .eq('lancamento_fixo_id', id);
+
       await removerLancamentoFixo(id);
       carregarDados();
-      toast({ title: "Lançamento fixo removido!" });
+      toast({ title: "Lançamento fixo e previsões futuras removidos!" });
     } catch (error) {
       toast({ title: "Erro ao remover", variant: "destructive" });
     }

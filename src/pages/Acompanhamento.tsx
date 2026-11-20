@@ -141,6 +141,7 @@ const Acompanhamento = () => {
 
   const carregarDados = async () => {
     const [ano, mes] = mesSelecionado.split('-').map(Number);
+    setResumo(null);
     try {
       const [categoriasData, cartoesData] = await Promise.all([
         obterCategorias(),

@@ -139,31 +139,75 @@ export const fazerLogout = async () => {
 };
 
 // ===== RESUMO =====
+// ===== RESUMO =====
 export const obterResumo = async (ano: number, mes: number): Promise<Resumo> => {
   try {
-    const transacoes = await obterTransacoes(ano, mes);
-    
+    const userId = await getCurrentUserId();
+    const inicioMes = `${ano}-${String(mes).padStart(2, '0')}-01`;
+    const ultimoDia = new Date(ano, mes, 0).getDate();
+    const fimMes = `${ano}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+
+    // Busca todas as transações até o fim do mês selecionado para calcular saldo acumulado real e projetado
+    let todasAteFimMes: any[] = [];
+    let temMais = true;
+    let pagina = 0;
+    const tamanhoPagina = 1000;
+
+    while (temMais) {
+      const { data, error } = await supabase
+        .from('transacoes')
+        .select('valor, status, tipo, data')
+        .eq('user_id', userId)
+        .lte('data', fimMes)
+        .range(pagina * tamanhoPagina, (pagina + 1) * tamanhoPagina - 1);
+
+      if (error) throw error;
+      if (data && data.length > 0) todasAteFimMes = [...todasAteFimMes, ...data];
+      if (!data || data.length < tamanhoPagina) temMais = false;
+      else pagina++;
+    }
+
+    let saldoAnteriorProjetado = 0;
+    let saldoAtualAcumulado = 0;
     let totalReceitasEfetivadas = 0;
     let totalDespesasEfetivadas = 0;
     let totalReceitasPrevistas = 0;
     let totalDespesasPrevistas = 0;
 
-    transacoes.forEach(t => {
+    todasAteFimMes.forEach(t => {
       const valor = Number(t.valor) || 0;
-      if (t.tipo === 'receita') {
-        if (t.status === 'efetivado') totalReceitasEfetivadas += valor;
-        else totalReceitasPrevistas += valor;
-      } else if (t.tipo === 'despesa') {
-        if (t.status === 'efetivado') totalDespesasEfetivadas += valor;
-        else totalDespesasPrevistas += valor;
+      const dataStr = String(t.data).split('T')[0];
+
+      // Acumulado efetivado até o fim do mês selecionado
+      if (t.status === 'efetivado') {
+        if (t.tipo === 'receita') saldoAtualAcumulado += valor;
+        else if (t.tipo === 'despesa') saldoAtualAcumulado -= valor;
+      }
+
+      // Saldo projetado vindo dos meses anteriores ao mês selecionado
+      if (dataStr < inicioMes) {
+        if (t.tipo === 'receita') saldoAnteriorProjetado += valor;
+        else if (t.tipo === 'despesa') saldoAnteriorProjetado -= valor;
+      } else {
+        // Movimentação específica dentro do mês selecionado
+        if (t.tipo === 'receita') {
+          if (t.status === 'efetivado') totalReceitasEfetivadas += valor;
+          else totalReceitasPrevistas += valor;
+        } else if (t.tipo === 'despesa') {
+          if (t.status === 'efetivado') totalDespesasEfetivadas += valor;
+          else totalDespesasPrevistas += valor;
+        }
       }
     });
 
-    const saldoAtualAcumulado = totalReceitasEfetivadas - totalDespesasEfetivadas;
-    const saldoFinalProjetado = saldoAtualAcumulado + (totalReceitasPrevistas - totalDespesasPrevistas);
+    const resultadoMes =
+      (totalReceitasEfetivadas + totalReceitasPrevistas) -
+      (totalDespesasEfetivadas + totalDespesasPrevistas);
+
+    const saldoFinalProjetado = saldoAnteriorProjetado + resultadoMes;
 
     return {
-      saldoInicial: 0,
+      saldoInicial: saldoAnteriorProjetado,
       totalReceitasEfetivadas,
       totalDespesasEfetivadas,
       totalReceitasPrevistas,

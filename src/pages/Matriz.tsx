@@ -100,7 +100,7 @@ const Matriz = () => {
       let totalCriados = 0;
 
       for (const item of fixos) {
-        const qtd = await gerarProjecoesLancamentoFixo(user.id, item, true);
+        const qtd = await gerarProjecoesLancamentoFixo(user.id, item, false);
         totalCriados += qtd;
       }
 

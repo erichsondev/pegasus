@@ -9,6 +9,7 @@ export interface Transacao {
   tipo: 'receita' | 'despesa' | 'investimento';
   categoria_id?: string;
   cartao_id?: string;
+  lancamento_fixo_id?: string;
   nome_categoria?: string;
 }
 
@@ -239,18 +240,27 @@ export const editarTransacao = async (id: string, transacao: {
   valor: number;
   data: string;
   status: 'efetivado' | 'previsto';
+  tipo?: 'receita' | 'despesa' | 'investimento';
   categoria_id?: string;
   cartao_id?: string;
 }): Promise<void> => {
   const userId = await getCurrentUserId();
+  const payload: any = {
+    descricao: transacao.descricao,
+    valor: Number(transacao.valor) || 0,
+    data: transacao.data,
+    status: transacao.status,
+    categoria_id: transacao.categoria_id || null,
+    cartao_id: transacao.cartao_id || null,
+  };
+
+  if (transacao.tipo) {
+    payload.tipo = transacao.tipo;
+  }
+
   const { error } = await supabase
     .from('transacoes')
-    .update({
-      ...transacao,
-      valor: Number(transacao.valor) || 0,
-      categoria_id: transacao.categoria_id || null,
-      cartao_id: transacao.cartao_id || null
-    })
+    .update(payload)
     .eq('id', id)
     .eq('user_id', userId);
   if (error) throw error;
@@ -422,14 +432,6 @@ export const adicionarLancamentoFixo = async (lancamento: {
     { ...payload, id: data.id },
     false
   );
-  return qtdGerada;
-};
-
-  const { error } = await supabase.from('lancamentos_fixos').insert([payload]);
-  if (error) throw error;
-
-  // Gera automaticamente todas as transações previstas conforme a vigência
-  const qtdGerada = await gerarProjecoesLancamentoFixo(userId, payload, false);
   return qtdGerada;
 };
 

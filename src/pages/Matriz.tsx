@@ -37,6 +37,7 @@ const Matriz = () => {
   const [novoCartao, setNovoCartao] = useState("");
 
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [descricaoOriginal, setDescricaoOriginal] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
   const [novoLancamento, setNovoLancamento] = useState({
@@ -70,21 +71,27 @@ const Matriz = () => {
     }
   };
 
+  const getHojeStr = () => {
+    const hoje = new Date();
+    return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+  };
+
   const handleSincronizar = async () => {
     if (!user) return;
-    if (!confirm("ATENÇÃO: Isso apagará todas as previsões futuras e recriará a agenda baseada apenas nas regras configuradas hoje.\n\nTransações já pagas/efetivadas NÃO serão afetadas.\n\nDeseja continuar?")) return;
+    if (!confirm("ATENÇÃO: Isso apagará todas as previsões futuras (e previstas do mês atual) e recriará a agenda baseada apenas nas regras configuradas hoje.\n\nTransações já pagas/efetivadas NÃO serão afetadas.\n\nDeseja continuar?")) return;
 
     setSyncing(true);
     try {
       const hoje = new Date();
-      const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+      const inicioMesAtualStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
 
+      // Remove todas as transações previstas a partir do início do mês atual
       const { data: apagadas, error: errDelete } = await supabase
         .from('transacoes')
         .delete()
         .eq('user_id', user.id)
         .eq('status', 'previsto')
-        .gte('data', hojeStr)
+        .gte('data', inicioMesAtualStr)
         .select('id');
 
       if (errDelete) throw errDelete;
@@ -140,6 +147,7 @@ const Matriz = () => {
 
   const prepararEdicao = (item: LancamentoFixo) => {
     setEditandoId(item.id);
+    setDescricaoOriginal(item.descricao);
     setNovoLancamento({
       descricao: item.descricao,
       valor: String(item.valor),
@@ -154,13 +162,14 @@ const Matriz = () => {
 
   const cancelarEdicao = () => {
     setEditandoId(null);
+    setDescricaoOriginal(null);
     setNovoLancamento({
       descricao: "",
       valor: "",
       tipo: "despesa",
       categoria_id: "",
       dia_do_mes: "",
-      data_inicio: new Date().toISOString().split('T')[0],
+      data_inicio: getHojeStr(),
       data_fim: ""
     });
   };
@@ -189,26 +198,35 @@ const Matriz = () => {
 
         if (error) throw error;
 
-        const hoje = new Date();
-        const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
-
+        // 1. Apaga parcelas previstas vinculadas pelo ID do lançamento fixo
         await supabase
           .from('transacoes')
           .delete()
           .eq('user_id', user.id)
           .eq('status', 'previsto')
-          .gte('data', hojeStr)
           .eq('lancamento_fixo_id', editandoId);
 
+        // 2. Fallback: apaga também parcelas previstas legadas (sem lancamento_fixo_id) com a mesma descrição original
+        if (descricaoOriginal) {
+          await supabase
+            .from('transacoes')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('status', 'previsto')
+            .is('lancamento_fixo_id', null)
+            .eq('descricao', descricaoOriginal);
+        }
+
+        // 3. Recria todas as parcelas previstas com o novo tipo, valor e vigência
         const qtdNovas = await gerarProjecoesLancamentoFixo(
           user.id,
           { ...payloadAtualizado, id: editandoId },
-          true
+          false
         );
 
         toast({
           title: "Lançamento atualizado!",
-          description: `Agenda futura recalculada automaticamente (${qtdNovas} parcelas previstas).`
+          description: `Alteração aplicada e ${qtdNovas} parcelas previstas foram atualizadas automaticamente.`
         });
       } else {
         const qtdGerada = await adicionarLancamentoFixo({
@@ -234,24 +252,28 @@ const Matriz = () => {
     }
   };
 
-  const handleRemoverLancamento = async (id: string) => {
+  const handleRemoverLancamento = async (item: LancamentoFixo) => {
     if (!user) return;
-    if (!confirm("Isso removerá a regra recorrente e suas previsões futuras ainda não pagas. Deseja continuar?")) return;
+    if (!confirm("Isso removerá a regra recorrente e todas as suas previsões ainda não pagas. Deseja continuar?")) return;
     try {
-      const hoje = new Date();
-      const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+      await supabase
+        .from('transacoes')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('status', 'previsto')
+        .eq('lancamento_fixo_id', item.id);
 
       await supabase
         .from('transacoes')
         .delete()
         .eq('user_id', user.id)
         .eq('status', 'previsto')
-        .gte('data', hojeStr)
-        .eq('lancamento_fixo_id', id);
+        .is('lancamento_fixo_id', null)
+        .eq('descricao', item.descricao);
 
-      await removerLancamentoFixo(id);
+      await removerLancamentoFixo(item.id);
       carregarDados();
-      toast({ title: "Lançamento fixo e previsões futuras removidos!" });
+      toast({ title: "Lançamento fixo e previsões removidos!" });
     } catch (error) {
       toast({ title: "Erro ao remover", variant: "destructive" });
     }
@@ -439,7 +461,7 @@ const Matriz = () => {
                       <Button size="icon" variant="ghost" onClick={() => prepararEdicao(lanc)} title="Editar Item">
                         <Pencil className="w-4 h-4 text-primary" />
                       </Button>
-                      <Button size="icon" variant="ghost" onClick={() => handleRemoverLancamento(lanc.id)} title="Remover Item">
+                      <Button size="icon" variant="ghost" onClick={() => handleRemoverLancamento(lanc)} title="Remover Item">
                         <Trash2 className="w-4 h-4 text-destructive" />
                       </Button>
                     </div>

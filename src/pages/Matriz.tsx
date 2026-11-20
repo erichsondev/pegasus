@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Header } from "@/components/Header";
+import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import {
   obterLancamentosFixos,
   adicionarLancamentoFixo,
   removerLancamentoFixo,
+  gerarProjecoesLancamentoFixo,
   type Categoria,
   type Cartao,
   type LancamentoFixo
@@ -22,21 +23,19 @@ import {
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Pencil, Save, X, Plus, RefreshCw, Loader2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Trash2, Pencil, Save, X, Plus, RefreshCw, Loader2, Settings } from "lucide-react";
 
 const Matriz = () => {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [cartoes, setCartoes] = useState<Cartao[]>([]);
   const [lancamentosFixos, setLancamentosFixos] = useState<LancamentoFixo[]>([]);
-  
+
   const { toast } = useToast();
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   const [novaCategoria, setNovaCategoria] = useState("");
   const [novoCartao, setNovoCartao] = useState("");
-  
+
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
@@ -46,11 +45,12 @@ const Matriz = () => {
     tipo: "despesa" as "receita" | "despesa",
     categoria_id: "",
     dia_do_mes: "",
-    data_inicio: new Date().toISOString().split('T')[0], 
-    data_fim: "" 
+    data_inicio: new Date().toISOString().split('T')[0],
+    data_fim: ""
   });
 
   useEffect(() => {
+    document.title = "Configurações | Pegasus Finance";
     carregarDados();
   }, []);
 
@@ -61,7 +61,7 @@ const Matriz = () => {
         obterCartoes(),
         obterLancamentosFixos()
       ]);
-      
+
       setCategorias(categoriasData);
       setCartoes(cartoesData);
       setLancamentosFixos(lancamentosData);
@@ -70,86 +70,37 @@ const Matriz = () => {
     }
   };
 
-  // =========================================================================
-  // MOTOR DE SINCRONIZAÇÃO DE AGENDA (Trazido do Node.js para o Frontend)
-  // =========================================================================
   const handleSincronizar = async () => {
     if (!user) return;
     if (!confirm("ATENÇÃO: Isso apagará todas as previsões futuras automáticas e recriará a agenda baseada apenas no que está configurado hoje.\n\nTransações manuais ou já pagas NÃO serão afetadas.\n\nDeseja continuar?")) return;
-    
+
     setSyncing(true);
     try {
       const hoje = new Date();
-      const hojeStr = hoje.toISOString().split('T')[0];
+      const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
 
-      // 1. Remove todas as previsões futuras não pagas
       const { error: errDelete } = await supabase
         .from('transacoes')
         .delete()
         .eq('user_id', user.id)
         .eq('status', 'previsto')
         .gte('data', hojeStr);
-        
+
       if (errDelete) throw errDelete;
 
-      // 2. Busca lançamentos fixos ativos atualizados
       const fixos = await obterLancamentosFixos();
-      const novasTransacoes: any[] = [];
+      let totalCriados = 0;
 
-      // 3. Recria a agenda
       for (const item of fixos) {
-        const inicioVig = new Date(item.data_inicio);
-        // Horizonte padrão de 5 anos se não tiver fim
-        const fimVig = item.data_fim ? new Date(item.data_fim) : new Date(hoje.getFullYear() + 5, 11, 31);
-        
-        const absInicio = inicioVig.getFullYear() * 12 + inicioVig.getMonth();
-        const absFim = fimVig.getFullYear() * 12 + fimVig.getMonth();
-
-        let pointer = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-        if (inicioVig < pointer) {
-          pointer = new Date(inicioVig.getFullYear(), inicioVig.getMonth(), 1);
-        }
-
-        while (pointer <= fimVig) {
-          const ano = pointer.getFullYear();
-          const mes = pointer.getMonth();
-          const absAlvo = ano * 12 + mes;
-
-          if (absAlvo >= absInicio && absAlvo <= absFim) {
-            const dataStr = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(item.dia_do_mes).padStart(2, '0')}`;
-            
-            // Cria apenas para datas de hoje em diante
-            if (dataStr >= hojeStr) {
-              novasTransacoes.push({
-                user_id: user.id,
-                categoria_id: item.categoria_id || null,
-                descricao: item.descricao,
-                valor: item.valor,
-                tipo: item.tipo,
-                status: 'previsto',
-                data: dataStr
-              });
-            }
-          }
-          pointer.setMonth(pointer.getMonth() + 1);
-        }
+        const qtd = await gerarProjecoesLancamentoFixo(user.id, item, true);
+        totalCriados += qtd;
       }
 
-      // 4. Inserção em Lotes (Chunks) para não estourar o payload da API
-      const chunkSize = 500;
-      for (let i = 0; i < novasTransacoes.length; i += chunkSize) {
-        const chunk = novasTransacoes.slice(i, i + chunkSize);
-        const { error: errInsert } = await supabase.from('transacoes').insert(chunk);
-        if (errInsert) throw errInsert;
-      }
-
-      toast({ 
-        title: "Agenda Sincronizada!", 
-        description: `Foram recriadas ${novasTransacoes.length} transações futuras.`,
-        className: "bg-green-600 text-white border-none"
+      toast({
+        title: "Agenda Sincronizada!",
+        description: `Foram recriadas ${totalCriados} transações futuras.`
       });
       carregarDados();
-
     } catch (error) {
       toast({ title: "Erro ao sincronizar agenda", variant: "destructive" });
       console.error(error);
@@ -215,14 +166,13 @@ const Matriz = () => {
 
   const handleSalvarLancamento = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       if (editandoId) {
-        // Usa atualização direta do Supabase para Edição
         const { error } = await supabase
           .from('lancamentos_fixos')
           .update({
-            descricao: novoLancamento.descricao,
+            descricao: novoLancamento.descricao.trim(),
             valor: parseFloat(novoLancamento.valor),
             tipo: novoLancamento.tipo,
             dia_do_mes: parseInt(novoLancamento.dia_do_mes),
@@ -234,21 +184,28 @@ const Matriz = () => {
           .eq('user_id', user?.id);
 
         if (error) throw error;
-        toast({ title: "Lançamento atualizado!" });
+        toast({
+          title: "Lançamento atualizado!",
+          description: "Clique em 'Sincronizar Agenda' se desejar recalcular as parcelas futuras."
+        });
       } else {
-        await adicionarLancamentoFixo({
+        const qtdGerada = await adicionarLancamentoFixo({
           descricao: novoLancamento.descricao,
           valor: parseFloat(novoLancamento.valor),
           tipo: novoLancamento.tipo,
           dia_do_mes: parseInt(novoLancamento.dia_do_mes),
-          categoria_id: novoLancamento.categoria_id,
+          categoria_id: novoLancamento.categoria_id || undefined,
           data_inicio: novoLancamento.data_inicio,
-          data_fim: novoLancamento.data_fim
+          data_fim: novoLancamento.data_fim || undefined
         });
-        toast({ title: "Lançamento fixo adicionado!" });
+
+        toast({
+          title: "Lançamento fixo adicionado!",
+          description: `${qtdGerada} parcelas previstas foram geradas automaticamente nos lançamentos.`
+        });
       }
-      
-      cancelarEdicao(); 
+
+      cancelarEdicao();
       carregarDados();
     } catch (error) {
       toast({ title: "Erro ao salvar", variant: "destructive" });
@@ -256,7 +213,7 @@ const Matriz = () => {
   };
 
   const handleRemoverLancamento = async (id: string) => {
-    if(!confirm("Isso afetará lançamentos futuros. Deseja continuar?")) return;
+    if (!confirm("Isso removerá a regra recorrente. Deseja continuar?")) return;
     try {
       await removerLancamentoFixo(id);
       carregarDados();
@@ -271,22 +228,30 @@ const Matriz = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <Header showBack={true} backPath="/menu" />
+    <div className="min-h-screen pb-20">
+      <Navigation title="Configurações" />
 
-      <main className="container mx-auto px-6 py-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-          <div>
-             <h2 className="text-2xl font-bold">Configurações</h2>
-             <p className="text-muted-foreground">Gerencie categorias e vigência de contas.</p>
+      <div className="max-w-7xl mx-auto pt-24 p-6 space-y-8 animate-fade-in">
+        {/* Cabeçalho Hero no Padrão Benefícios 360 */}
+        <div className="text-white bg-black/50 p-8 rounded-2xl backdrop-blur-md border border-white/10 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-6">
+            <div className="p-4 bg-primary/20 rounded-full shrink-0">
+              <Settings className="h-12 w-12 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold mb-2">Configurações e Recorrências</h1>
+              <p className="text-base md:text-lg text-gray-200">
+                Gerencie categorias, cartões de crédito e vigência de receitas/despesas fixas.
+              </p>
+            </div>
           </div>
-          
-          <Button 
-            variant="outline" 
+
+          <Button
+            variant="secondary"
             onClick={handleSincronizar}
             disabled={syncing}
-            className="gap-2 text-slate-600 border-slate-300 hover:bg-slate-100 hover:text-blue-600 shadow-sm"
-            title="Limpar lixo e recalcular futuro"
+            className="gap-2 shrink-0"
+            title="Limpar previsões futuras e recalcular agenda"
           >
             {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             {syncing ? "Sincronizando..." : "Sincronizar Agenda"}
@@ -303,17 +268,17 @@ const Matriz = () => {
               </form>
               <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                 {categorias.map(cat => (
-                  <div key={cat.id} className="flex justify-between items-center p-3 border rounded-lg bg-white/50">
-                    <span>{cat.nome}</span>
+                  <div key={cat.id} className="flex justify-between items-center p-3 border rounded-lg bg-background/60">
+                    <span className="font-medium">{cat.nome}</span>
                     <Button size="icon" variant="ghost" onClick={async () => {
-                        try {
-                          await removerCategoria(cat.id);
-                          carregarDados();
-                          toast({ title: "Categoria removida!" });
-                        } catch (error) {
-                          toast({ title: "Erro ao remover", variant: "destructive" });
-                        }
-                      }}>
+                      try {
+                        await removerCategoria(cat.id);
+                        carregarDados();
+                        toast({ title: "Categoria removida!" });
+                      } catch (error) {
+                        toast({ title: "Erro ao remover", variant: "destructive" });
+                      }
+                    }}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>
@@ -331,17 +296,17 @@ const Matriz = () => {
               </form>
               <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                 {cartoes.map(cartao => (
-                  <div key={cartao.id} className="flex justify-between items-center p-3 border rounded-lg bg-white/50">
-                    <span>{cartao.nome}</span>
+                  <div key={cartao.id} className="flex justify-between items-center p-3 border rounded-lg bg-background/60">
+                    <span className="font-medium">{cartao.nome}</span>
                     <Button size="icon" variant="ghost" onClick={async () => {
-                        try {
-                          await removerCartao(cartao.id);
-                          carregarDados();
-                          toast({ title: "Cartão removido!" });
-                        } catch (error) {
-                          toast({ title: "Erro ao remover", variant: "destructive" });
-                        }
-                      }}>
+                      try {
+                        await removerCartao(cartao.id);
+                        carregarDados();
+                        toast({ title: "Cartão removido!" });
+                      } catch (error) {
+                        toast({ title: "Erro ao remover", variant: "destructive" });
+                      }
+                    }}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>
@@ -350,10 +315,10 @@ const Matriz = () => {
             </CardContent>
           </Card>
 
-          <Card className={`lg:col-span-2 transition-colors glass-card ${editandoId ? 'border-blue-500 bg-blue-50/50' : ''}`}>
+          <Card className={`lg:col-span-2 transition-colors glass-card ${editandoId ? 'border-primary ring-2 ring-primary/20' : ''}`}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                {editandoId ? <Pencil className="w-5 h-5 text-blue-600" /> : <Plus className="w-5 h-5" />}
+                {editandoId ? <Pencil className="w-5 h-5 text-primary" /> : <Plus className="w-5 h-5" />}
                 {editandoId ? "Editando Lançamento Fixo" : "Novo Lançamento Fixo"}
               </CardTitle>
             </CardHeader>
@@ -361,7 +326,7 @@ const Matriz = () => {
               <form onSubmit={handleSalvarLancamento} className="grid md:grid-cols-4 lg:grid-cols-6 gap-4 items-end">
                 <div className="md:col-span-2">
                   <Label>Descrição</Label>
-                  <Input value={novoLancamento.descricao} onChange={(e) => setNovoLancamento({ ...novoLancamento, descricao: e.target.value })} required />
+                  <Input placeholder="Ex: Salário, Aluguel..." value={novoLancamento.descricao} onChange={(e) => setNovoLancamento({ ...novoLancamento, descricao: e.target.value })} required />
                 </div>
                 <div>
                   <Label>Valor (R$)</Label>
@@ -392,21 +357,21 @@ const Matriz = () => {
                 </div>
 
                 <div className="md:col-span-2">
-                   <Label>Início Vigência</Label>
-                   <Input type="date" value={novoLancamento.data_inicio} onChange={(e) => setNovoLancamento({ ...novoLancamento, data_inicio: e.target.value })} required />
+                  <Label>Início Vigência</Label>
+                  <Input type="date" value={novoLancamento.data_inicio} onChange={(e) => setNovoLancamento({ ...novoLancamento, data_inicio: e.target.value })} required />
                 </div>
                 <div className="md:col-span-2">
-                   <Label>Fim Vigência (Opcional)</Label>
-                   <Input type="date" value={novoLancamento.data_fim} onChange={(e) => setNovoLancamento({ ...novoLancamento, data_fim: e.target.value })} />
+                  <Label>Fim Vigência (Opcional)</Label>
+                  <Input type="date" value={novoLancamento.data_fim} onChange={(e) => setNovoLancamento({ ...novoLancamento, data_fim: e.target.value })} />
                 </div>
 
                 <div className="md:col-span-2 flex gap-2">
                   {editandoId && (
-                    <Button type="button" variant="outline" onClick={cancelarEdicao} className="flex-1 bg-white">
+                    <Button type="button" variant="outline" onClick={cancelarEdicao} className="flex-1">
                       <X className="w-4 h-4 mr-2" /> Cancelar
                     </Button>
                   )}
-                  <Button type="submit" className={`flex-1 ${editandoId ? 'bg-blue-600 hover:bg-blue-700' : ''}`}>
+                  <Button type="submit" className="flex-1">
                     {editandoId ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                     {editandoId ? "Salvar" : "Adicionar"}
                   </Button>
@@ -416,29 +381,29 @@ const Matriz = () => {
               <div className="space-y-2 pt-4 border-t">
                 <h3 className="font-semibold mb-2">Lista de Itens Recorrentes</h3>
                 {lancamentosFixos.map(lanc => (
-                  <div key={lanc.id} className={`flex flex-col md:flex-row items-start md:items-center justify-between p-3 border rounded-lg bg-white/60 ${lanc.tipo === 'receita' ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-red-500'}`}>
+                  <div key={lanc.id} className={`flex flex-col md:flex-row items-start md:items-center justify-between p-3 border rounded-lg bg-background/60 ${lanc.tipo === 'receita' ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-red-500'}`}>
                     <div className="flex-1 grid md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
                       <div>
                         <p className="font-semibold">{lanc.descricao}</p>
                         <p className="text-xs text-muted-foreground">{lanc.nome_categoria || 'Sem categoria'}</p>
                       </div>
                       <div>
-                         <p className={lanc.tipo === 'receita' ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>
-                           {formatarMoeda(lanc.valor)}
-                         </p>
-                         <p className="text-sm text-muted-foreground">Dia {lanc.dia_do_mes}</p>
+                        <p className={lanc.tipo === 'receita' ? 'text-green-600 dark:text-green-400 font-bold' : 'text-red-600 dark:text-red-400 font-bold'}>
+                          {formatarMoeda(lanc.valor)}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Dia {lanc.dia_do_mes}</p>
                       </div>
                       <div className="lg:col-span-2">
                         <p className="text-xs text-muted-foreground">
-                           Vigência: <b>{new Date(lanc.data_inicio).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</b>
-                           {lanc.data_fim ? ` até ${new Date(lanc.data_fim).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}` : ' (Indeterminado)'}
+                          Vigência: <b>{new Date(lanc.data_inicio).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</b>
+                          {lanc.data_fim ? ` até ${new Date(lanc.data_fim).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}` : ' (Indeterminado)'}
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="flex gap-2 mt-2 md:mt-0">
                       <Button size="icon" variant="ghost" onClick={() => prepararEdicao(lanc)} title="Editar Item">
-                        <Pencil className="w-4 h-4 text-blue-500" />
+                        <Pencil className="w-4 h-4 text-primary" />
                       </Button>
                       <Button size="icon" variant="ghost" onClick={() => handleRemoverLancamento(lanc.id)} title="Remover Item">
                         <Trash2 className="w-4 h-4 text-destructive" />
@@ -446,15 +411,15 @@ const Matriz = () => {
                     </div>
                   </div>
                 ))}
-                
+
                 {lancamentosFixos.length === 0 && (
-                   <p className="text-center text-muted-foreground py-4">Nenhum lançamento fixo cadastrado.</p>
+                  <p className="text-center text-muted-foreground py-4">Nenhum lançamento fixo cadastrado.</p>
                 )}
               </div>
             </CardContent>
           </Card>
         </div>
-      </main>
+      </div>
     </div>
   );
 };

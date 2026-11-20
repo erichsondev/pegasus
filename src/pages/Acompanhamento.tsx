@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Header } from "@/components/Header";
+import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,28 +34,29 @@ import {
   type Resumo
 } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  Pencil, 
-  Trash2, 
-  Check, 
-  X, 
-  Calendar, 
-  TrendingUp, 
-  TrendingDown, 
-  Wallet, 
-  AlertCircle, 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  Calendar,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
-  ArrowUp,   
-  ArrowDown, 
-  Undo2, 
+  ArrowUp,
+  ArrowDown,
+  Undo2,
   Layers,
   CalendarClock,
-  Filter
+  Filter,
+  LayoutDashboard
 } from "lucide-react";
 
-const QuickDateButton = ({ currentData, onUpdate }: { currentData: string, onUpdate: (novaData: string) => void }) => {
+const QuickDateButton = ({ currentData, onUpdate }: { currentData: string; onUpdate: (novaData: string) => void }) => {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const dataFormatada = currentData.split('T')[0];
 
@@ -70,16 +71,16 @@ const QuickDateButton = ({ currentData, onUpdate }: { currentData: string, onUpd
 
   return (
     <div className="relative inline-block">
-      <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-blue-600" title="Alterar Data">
+      <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-primary" title="Alterar Data">
         <CalendarClock className="w-4 h-4" />
       </Button>
-      <input 
-        type="date" 
+      <input
+        type="date"
         className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
         defaultValue={dataFormatada}
         key={dataFormatada}
         onChange={handleChange}
-        onClick={(e) => e.stopPropagation()} 
+        onClick={(e) => e.stopPropagation()}
       />
     </div>
   );
@@ -92,10 +93,10 @@ const Acompanhamento = () => {
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [mesSelecionado, setMesSelecionado] = useState("");
   const [editandoId, setEditandoId] = useState<string | null>(null);
-  
-  const [priorizarPendentes, setPriorizarPendentes] = useState(true); 
+
+  const [priorizarPendentes, setPriorizarPendentes] = useState(true);
   const [filtroTipo, setFiltroTipo] = useState<'todos' | 'receita' | 'despesa'>('todos');
-  
+
   const { toast } = useToast();
 
   const getHojeLocal = () => {
@@ -115,6 +116,7 @@ const Acompanhamento = () => {
   });
 
   useEffect(() => {
+    document.title = "Acompanhamento | Pegasus Finance";
     const hoje = new Date();
     const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
     setMesSelecionado(mesAtual);
@@ -150,7 +152,6 @@ const Acompanhamento = () => {
 
       const resResumo = await obterResumo(ano, mes);
       setResumo(resResumo);
-
     } catch (error) {
       console.error(error);
       toast({ title: "Erro ao carregar dados", variant: "destructive" });
@@ -176,7 +177,7 @@ const Acompanhamento = () => {
       lista.sort((a, b) => {
         if (a.status === 'previsto' && b.status === 'efetivado') return -1;
         if (a.status === 'efetivado' && b.status === 'previsto') return 1;
-        return 0; 
+        return 0;
       });
     }
     return lista;
@@ -217,7 +218,7 @@ const Acompanhamento = () => {
         cartao_id: atual.cartao_id || undefined,
         status: atual.status,
       });
-      toast({ title: "Data alterada!", className: "bg-blue-600 text-white border-none" });
+      toast({ title: "Data alterada!" });
       carregarDados();
     } catch (error) {
       toast({ title: "Erro ao mudar data", variant: "destructive" });
@@ -245,14 +246,14 @@ const Acompanhamento = () => {
         await adicionarTransacao(transacao);
         toast({ title: "Transação adicionada!" });
       }
-      setFormData({ 
-        descricao: "", 
-        valor: "", 
-        data: getHojeLocal(), 
-        tipo: formData.tipo, 
-        categoria_id: "", 
-        cartao_id: "", 
-        efetivado: false 
+      setFormData({
+        descricao: "",
+        valor: "",
+        data: getHojeLocal(),
+        tipo: formData.tipo,
+        categoria_id: "",
+        cartao_id: "",
+        efetivado: false
       });
       carregarDados();
     } catch (error) {
@@ -263,7 +264,7 @@ const Acompanhamento = () => {
   const handleEfetivar = async (id: string) => {
     try {
       await efetivarTransacao(id);
-      toast({ title: "Pagamento Confirmado!", className: "bg-green-600 text-white border-none" });
+      toast({ title: "Pagamento Confirmado!" });
       carregarDados();
     } catch (error) {
       toast({ title: "Erro ao efetivar", variant: "destructive" });
@@ -273,7 +274,7 @@ const Acompanhamento = () => {
   const handleReverter = async (id: string) => {
     try {
       await preverTransacao(id);
-      toast({ title: "Transação Revertida!", description: "Voltou para status 'Previsto'.", className: "bg-orange-500 text-white border-none" });
+      toast({ title: "Transação Revertida!", description: "Voltou para status 'Previsto'." });
       carregarDados();
     } catch (error) {
       toast({ title: "Erro ao reverter", variant: "destructive" });
@@ -321,23 +322,30 @@ const Acompanhamento = () => {
 
   return (
     <div className="min-h-screen pb-20">
-      <Header showBack={true} backPath="/menu" />
-      <main className="container mx-auto px-4 md:px-6 py-8 animate-fade-in">
-        
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8 bg-white/70 backdrop-blur-md p-4 rounded-xl shadow-sm border border-white/50">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-800">Acompanhamento</h2>
-            <p className="text-slate-600 text-sm">Controle detalhado de entradas e saídas.</p>
+      <Navigation title="Acompanhamento" />
+      <div className="max-w-7xl mx-auto pt-24 p-6 space-y-8 animate-fade-in">
+        {/* Cabeçalho Hero no Padrão Benefícios 360 */}
+        <div className="text-white bg-black/50 p-8 rounded-2xl backdrop-blur-md border border-white/10 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="flex items-center gap-6">
+            <div className="p-4 bg-primary/20 rounded-full shrink-0">
+              <LayoutDashboard className="h-12 w-12 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold mb-2">Acompanhamento Mensal</h1>
+              <p className="text-base md:text-lg text-gray-200">
+                Controle detalhado de entradas, saídas e previsões do período.
+              </p>
+            </div>
           </div>
-          
-          <div className="flex items-center bg-white p-1 rounded-lg shadow-sm border border-slate-100">
-            <Button variant="ghost" size="icon" onClick={() => navegarMes(-1)} className="text-slate-400 hover:text-primary">
+
+          <div className="flex items-center bg-background text-foreground p-1 rounded-xl shadow-md border">
+            <Button variant="ghost" size="icon" onClick={() => navegarMes(-1)}>
               <ChevronLeft className="w-5 h-5" />
             </Button>
             <div className="flex items-center px-2">
               <Calendar className="w-4 h-4 text-primary mr-2" />
               <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
-                <SelectTrigger className="w-[180px] border-none bg-transparent shadow-none focus:ring-0 font-bold text-slate-700 text-center">
+                <SelectTrigger className="w-[185px] border-none bg-transparent shadow-none focus:ring-0 font-bold text-center">
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent className="max-h-[300px]">
@@ -347,332 +355,320 @@ const Acompanhamento = () => {
                 </SelectContent>
               </Select>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => navegarMes(1)} className="text-slate-400 hover:text-primary">
+            <Button variant="ghost" size="icon" onClick={() => navegarMes(1)}>
               <ChevronRight className="w-5 h-5" />
             </Button>
           </div>
         </div>
 
-        <Tabs defaultValue="geral" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 md:w-[400px] md:mx-auto bg-white/50">
-            <TabsTrigger value="geral">Visão Geral</TabsTrigger>
-            <TabsTrigger value="lancamentos">Lançamentos</TabsTrigger>
-          </TabsList>
+        <Card className="glass-card shadow-md">
+          <Tabs defaultValue="lancamentos" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 rounded-none border-b bg-transparent h-auto p-0">
+              <TabsTrigger value="lancamentos" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-primary/5 rounded-none py-4">
+                Lançamentos e Extrato
+              </TabsTrigger>
+              <TabsTrigger value="geral" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-primary/5 rounded-none py-4">
+                Resumo Consolidado
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="geral">
-            {resumo && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
-                    <Wallet className="w-4 h-4" /> Fluxo de Caixa (Realizado)
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card className="border-l-4 border-l-green-500 shadow-sm glass-card">
-                      <CardContent className="pt-6">
-                        <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Receitas Reais</p>
-                        <p className="text-2xl font-bold text-green-600">{formatarMoeda(resumo.totalReceitasEfetivadas)}</p>
-                      </CardContent>
-                    </Card>
-                    <Card className="border-l-4 border-l-red-500 shadow-sm glass-card">
-                      <CardContent className="pt-6">
-                        <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Despesas Pagas</p>
-                        <p className="text-2xl font-bold text-red-600">{formatarMoeda(resumo.totalDespesasEfetivadas)}</p>
-                      </CardContent>
-                    </Card>
-                    <Card className="border-l-4 border-l-blue-600 shadow-sm bg-blue-50/80 backdrop-blur-sm">
-                      <CardContent className="pt-6">
-                        <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Saldo em Conta</p>
-                        <p className="text-2xl font-bold text-blue-700">{formatarMoeda(resumo.saldoAtualAcumulado)}</p>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" /> Previsão (Agendado)
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card className="border-dashed border-2 border-slate-300/50 shadow-none bg-white/30">
-                      <CardContent className="pt-6">
-                        <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Receitas Previstas</p>
-                        <p className="text-xl font-bold text-slate-600">{formatarMoeda(resumo.totalReceitasPrevistas)}</p>
-                      </CardContent>
-                    </Card>
-                    <Card className="border-dashed border-2 border-slate-300/50 shadow-none bg-white/30">
-                      <CardContent className="pt-6">
-                        <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Despesas Previstas</p>
-                        <p className="text-xl font-bold text-slate-600">{formatarMoeda(resumo.totalDespesasPrevistas)}</p>
-                      </CardContent>
-                    </Card>
-                    <Card className="border-dashed border-2 border-slate-300/50 shadow-none bg-white/30">
-                      <CardContent className="pt-6">
-                        <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Projeção Final</p>
-                        <p className="text-xl font-bold text-slate-700">{formatarMoeda(resumo.saldoFinalProjetado)}</p>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </div>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="lancamentos">
-            <div className="grid lg:grid-cols-[350px_1fr] gap-8">
-              
-              <div className="order-2 lg:order-1">
-                <Card className={`sticky top-24 transition-all glass-card ${editandoId ? 'border-blue-500 ring-2 ring-blue-100' : ''}`}>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      {editandoId ? <Pencil className="w-4 h-4 text-blue-600" /> : <Wallet className="w-4 h-4 text-slate-500" />}
-                      {editandoId ? "Editando Transação" : "Novo Lançamento"}
-                    </CardTitle>
-                    <CardDescription>Adicione receitas ou despesas pontuais.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                      <div>
-                        <Label className="text-xs">Descrição</Label>
-                        <Input value={formData.descricao} onChange={(e) => setFormData({ ...formData, descricao: e.target.value })} required placeholder="Ex: Supermercado" className="mt-1" />
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-xs">Valor (R$)</Label>
-                          <Input type="number" step="0.01" value={formData.valor} onChange={(e) => setFormData({ ...formData, valor: e.target.value })} required className="mt-1" />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Data</Label>
-                          <Input 
-                            type="date" 
-                            value={formData.data} 
-                            onChange={(e) => setFormData({ ...formData, data: e.target.value })} 
-                            required 
-                            className="mt-1 [&::-webkit-calendar-picker-indicator]:hidden" 
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-xs">Tipo</Label>
-                          <Select value={formData.tipo} onValueChange={(v: any) => setFormData({ ...formData, tipo: v })}>
-                            <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="receita">Receita</SelectItem>
-                              <SelectItem value="despesa">Despesa</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label className="text-xs">Categoria</Label>
-                          <Select value={formData.categoria_id} onValueChange={(v) => setFormData({ ...formData, categoria_id: v })}>
-                            <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                            <SelectContent>
-                              {categorias.map(cat => (<SelectItem key={cat.id} value={cat.id}>{cat.nome}</SelectItem>))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      {formData.tipo === "despesa" && (
-                        <div>
-                          <Label className="text-xs">Cartão (Opcional)</Label>
-                          <Select value={formData.cartao_id} onValueChange={(v) => setFormData({ ...formData, cartao_id: v })}>
-                            <SelectTrigger className="mt-1"><SelectValue placeholder="Nenhum" /></SelectTrigger>
-                            <SelectContent>
-                              {cartoes.map(cartao => (<SelectItem key={cartao.id} value={cartao.id}>{cartao.nome}</SelectItem>))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 py-2">
-                        <input type="checkbox" id="efetivado" checked={formData.efetivado} onChange={(e) => setFormData({ ...formData, efetivado: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                        <Label htmlFor="efetivado" className="cursor-pointer font-normal text-slate-700">Já foi pago/recebido? (Efetivado)</Label>
-                      </div>
-                      <div className="flex gap-2 pt-2">
-                        {editandoId && (
-                          <Button type="button" variant="outline" onClick={() => { 
-                            setEditandoId(null); 
-                            setFormData({ 
-                              descricao: "", 
-                              valor: "", 
-                              data: getHojeLocal(),
-                              tipo: "receita", 
-                              categoria_id: "", 
-                              cartao_id: "", 
-                              efetivado: false 
-                            }); 
-                          }} className="flex-1">
-                            <X className="w-4 h-4 mr-2" /> Cancelar
-                          </Button>
-                        )}
-                        <Button type="submit" className={`flex-1 ${editandoId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
-                          {editandoId ? <Check className="w-4 h-4 mr-2" /> : <Check className="w-4 h-4 mr-2" />}
-                          {editandoId ? "Salvar" : "Adicionar"}
-                        </Button>
-                      </div>
-                    </form>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="order-1 lg:order-2 space-y-4">
-                
-                <div className="bg-white/60 p-4 rounded-lg shadow-sm border border-slate-100 backdrop-blur-sm flex flex-col gap-3">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-700">Extrato</h3>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50 text-xs gap-1">
-                          <Trash2 className="w-3.5 h-3.5" /> Limpar Mês
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Cuidado Absoluto!</AlertDialogTitle>
-                          <AlertDialogDescription>Isso apagará <b>todas</b> as transações deste mês.</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleLimparMes} className="bg-red-600 hover:bg-red-700">Confirmar Exclusão</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 justify-between">
-                    <div className="flex bg-slate-100 rounded-md p-1 gap-1">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setFiltroTipo('todos')}
-                        className={`h-7 px-3 text-xs ${filtroTipo === 'todos' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
-                      >
-                        <Layers className="w-3 h-3 mr-1" /> Todos
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setFiltroTipo('receita')}
-                        className={`h-7 px-3 text-xs ${filtroTipo === 'receita' ? 'bg-white text-green-700 shadow-sm' : 'text-slate-500'}`}
-                      >
-                        <TrendingUp className="w-3 h-3 mr-1" /> Receitas
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setFiltroTipo('despesa')}
-                        className={`h-7 px-3 text-xs ${filtroTipo === 'despesa' ? 'bg-white text-red-700 shadow-sm' : 'text-slate-500'}`}
-                      >
-                        <TrendingDown className="w-3 h-3 mr-1" /> Despesas
-                      </Button>
+            <TabsContent value="geral" className="p-6 md:p-8">
+              {resumo && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
+                      <Wallet className="w-4 h-4" /> Fluxo de Caixa (Realizado)
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Card className="border-l-4 border-l-green-500 shadow-sm glass-card">
+                        <CardContent className="pt-6">
+                          <p className="text-xs text-muted-foreground font-semibold uppercase mb-1">Receitas Reais</p>
+                          <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatarMoeda(resumo.totalReceitasEfetivadas)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-l-4 border-l-red-500 shadow-sm glass-card">
+                        <CardContent className="pt-6">
+                          <p className="text-xs text-muted-foreground font-semibold uppercase mb-1">Despesas Pagas</p>
+                          <p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatarMoeda(resumo.totalDespesasEfetivadas)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-l-4 border-l-primary shadow-sm bg-primary/10">
+                        <CardContent className="pt-6">
+                          <p className="text-xs text-muted-foreground font-semibold uppercase mb-1">Saldo em Conta</p>
+                          <p className="text-2xl font-bold text-primary">{formatarMoeda(resumo.saldoAtualAcumulado)}</p>
+                        </CardContent>
+                      </Card>
                     </div>
+                  </div>
 
-                    <div className="flex gap-2 ml-auto">
-                        <Button 
-                          variant={priorizarPendentes ? "default" : "outline"} 
-                          size="sm" 
-                          onClick={() => setPriorizarPendentes(!priorizarPendentes)}
-                          className={`h-8 text-xs ${priorizarPendentes ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200' : 'text-slate-500'}`}
-                        >
-                          <Filter className="w-3 h-3 mr-1" />
-                          Pendentes
-                        </Button>
+                  <div>
+                    <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-3 ml-1 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" /> Previsão (Agendado)
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Card className="border-dashed border-2 shadow-none glass-card">
+                        <CardContent className="pt-6">
+                          <p className="text-xs text-muted-foreground font-semibold uppercase mb-1">Receitas Previstas</p>
+                          <p className="text-xl font-bold">{formatarMoeda(resumo.totalReceitasPrevistas)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-dashed border-2 shadow-none glass-card">
+                        <CardContent className="pt-6">
+                          <p className="text-xs text-muted-foreground font-semibold uppercase mb-1">Despesas Previstas</p>
+                          <p className="text-xl font-bold">{formatarMoeda(resumo.totalDespesasPrevistas)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-dashed border-2 shadow-none glass-card">
+                        <CardContent className="pt-6">
+                          <p className="text-xs text-muted-foreground font-semibold uppercase mb-1">Projeção Final</p>
+                          <p className="text-xl font-bold text-primary">{formatarMoeda(resumo.saldoFinalProjetado)}</p>
+                        </CardContent>
+                      </Card>
                     </div>
                   </div>
                 </div>
+              )}
+            </TabsContent>
 
-                <div className="space-y-3">
-                  {transacoesExibidas.length === 0 ? (
-                    <div className="text-center py-16 bg-white/40 rounded-lg border border-dashed border-slate-300">
-                      <p className="text-slate-500 mb-2">Nenhuma transação encontrada.</p>
-                      <p className="text-xs text-slate-400">Use o formulário para começar.</p>
-                    </div>
-                  ) : (
-                    transacoesExibidas.map((transacao, index) => (
-                      <div key={transacao.id} className={`group flex items-center justify-between p-4 bg-white/80 border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'opacity-90 bg-white border-l-4 border-l-blue-500' : 'opacity-70 bg-slate-50'}`}>
-                        <div className="flex items-center gap-4 overflow-hidden">
-                          {filtroTipo === 'todos' && !priorizarPendentes && (
-                            <div className="flex gap-0.5 mr-2">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-6 w-6 text-slate-300 hover:text-blue-500 hover:bg-transparent p-0"
-                                onClick={() => moverItem(index, 'cima')}
-                                disabled={index === 0}
-                                title="Mover para Cima"
-                              >
-                                <ArrowUp className="w-3 h-3" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-6 w-6 text-slate-300 hover:text-blue-500 hover:bg-transparent p-0"
-                                onClick={() => moverItem(index, 'baixo')}
-                                disabled={index === transacoesExibidas.length - 1}
-                                title="Mover para Baixo"
-                              >
-                                <ArrowDown className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          )}
+            <TabsContent value="lancamentos" className="p-6 md:p-8">
+              <div className="grid lg:grid-cols-[350px_1fr] gap-8">
+                <div className="order-2 lg:order-1">
+                  <Card className={`sticky top-24 transition-all glass-card ${editandoId ? 'border-primary ring-2 ring-primary/20' : ''}`}>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        {editandoId ? <Pencil className="w-4 h-4 text-primary" /> : <Wallet className="w-4 h-4 text-muted-foreground" />}
+                        {editandoId ? "Editando Transação" : "Novo Lançamento"}
+                      </CardTitle>
+                      <CardDescription>Adicione receitas ou despesas pontuais.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                          <Label className="text-xs">Descrição</Label>
+                          <Input value={formData.descricao} onChange={(e) => setFormData({ ...formData, descricao: e.target.value })} required placeholder="Ex: Supermercado" className="mt-1" />
+                        </div>
 
-                          <div className={`p-2 rounded-full ${transacao.tipo === 'receita' ? 'bg-green-100' : 'bg-red-100'}`}>
-                            {transacao.tipo === 'receita' ? <TrendingUp className="w-5 h-5 text-green-600" /> : <TrendingDown className="w-5 h-5 text-red-600" />}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs">Valor (R$)</Label>
+                            <Input type="number" step="0.01" value={formData.valor} onChange={(e) => setFormData({ ...formData, valor: e.target.value })} required className="mt-1" />
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-slate-800 truncate">{transacao.descricao}</p>
-                            <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                              <span className="font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-600">
-                                {transacao.data.split('T')[0].split('-').reverse().join('/')}
-                              </span>
-                              <Badge variant="secondary" className="font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">
-                                {transacao.nome_categoria}
-                              </Badge>
-                              {transacao.status === 'previsto' && (
-                                <span className="text-blue-500 font-medium flex items-center gap-1">
-                                  <AlertCircle className="w-3 h-3" /> Previsto
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="text-right pl-4">
-                          <p className={`font-bold ${transacao.tipo === 'receita' ? 'text-green-600' : 'text-red-600'}`}>
-                            {transacao.tipo === 'despesa' ? '-' : '+'}{formatarMoeda(transacao.valor)}
-                          </p>
-                          <div className="flex justify-end gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <QuickDateButton 
-                              currentData={transacao.data} 
-                              onUpdate={(novaData) => handleAlterarData(transacao.id, novaData)} 
+                          <div>
+                            <Label className="text-xs">Data</Label>
+                            <Input
+                              type="date"
+                              value={formData.data}
+                              onChange={(e) => setFormData({ ...formData, data: e.target.value })}
+                              required
+                              className="mt-1"
                             />
-                            {transacao.status === 'previsto' ? (
-                              <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-green-600 hover:bg-green-50" onClick={() => handleEfetivar(transacao.id)} title="Confirmar Pagamento">
-                                <CheckCircle2 className="w-4 h-4" />
-                              </Button>
-                            ) : (
-                              <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-orange-500 hover:bg-orange-50" onClick={() => handleReverter(transacao.id)} title="Desfazer/Reverter para Previsto">
-                                <Undo2 className="w-4 h-4" />
-                              </Button>
-                            )}
-                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEditar(transacao)}>
-                              <Pencil className="w-3.5 h-3.5 text-slate-400 hover:text-blue-600" />
-                            </Button>
-                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleRemover(transacao.id)}>
-                              <Trash2 className="w-3.5 h-3.5 text-slate-400 hover:text-red-600" />
-                            </Button>
                           </div>
                         </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs">Tipo</Label>
+                            <Select value={formData.tipo} onValueChange={(v: any) => setFormData({ ...formData, tipo: v })}>
+                              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="receita">Receita</SelectItem>
+                                <SelectItem value="despesa">Despesa</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-xs">Categoria</Label>
+                            <Select value={formData.categoria_id} onValueChange={(v) => setFormData({ ...formData, categoria_id: v })}>
+                              <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                              <SelectContent>
+                                {categorias.map(cat => (<SelectItem key={cat.id} value={cat.id}>{cat.nome}</SelectItem>))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        {formData.tipo === "despesa" && (
+                          <div>
+                            <Label className="text-xs">Cartão (Opcional)</Label>
+                            <Select value={formData.cartao_id} onValueChange={(v) => setFormData({ ...formData, cartao_id: v })}>
+                              <SelectTrigger className="mt-1"><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                              <SelectContent>
+                                {cartoes.map(cartao => (<SelectItem key={cartao.id} value={cartao.id}>{cartao.nome}</SelectItem>))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 py-2">
+                          <input type="checkbox" id="efetivado" checked={formData.efetivado} onChange={(e) => setFormData({ ...formData, efetivado: e.target.checked })} className="w-4 h-4 rounded border-input text-primary focus:ring-primary" />
+                          <Label htmlFor="efetivado" className="cursor-pointer font-normal">Já foi pago/recebido? (Efetivado)</Label>
+                        </div>
+                        <div className="flex gap-2 pt-2">
+                          {editandoId && (
+                            <Button type="button" variant="outline" onClick={() => {
+                              setEditandoId(null);
+                              setFormData({
+                                descricao: "",
+                                valor: "",
+                                data: getHojeLocal(),
+                                tipo: "receita",
+                                categoria_id: "",
+                                cartao_id: "",
+                                efetivado: false
+                              });
+                            }} className="flex-1">
+                              <X className="w-4 h-4 mr-2" /> Cancelar
+                            </Button>
+                          )}
+                          <Button type="submit" className="flex-1">
+                            <Check className="w-4 h-4 mr-2" />
+                            {editandoId ? "Salvar" : "Adicionar"}
+                          </Button>
+                        </div>
+                      </form>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="order-1 lg:order-2 space-y-4">
+                  <div className="bg-muted/30 p-4 rounded-lg border flex flex-col gap-3">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-bold">Extrato</h3>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 text-xs gap-1">
+                            <Trash2 className="w-3.5 h-3.5" /> Limpar Mês
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="backdrop-blur-sm">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Confirmar exclusão em lote</AlertDialogTitle>
+                            <AlertDialogDescription>Isso apagará <b>todas</b> as transações deste mês.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleLimparMes} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Confirmar Exclusão</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 justify-between">
+                      <div className="flex bg-muted rounded-md p-1 gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setFiltroTipo('todos')}
+                          className={`h-7 px-3 text-xs ${filtroTipo === 'todos' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
+                        >
+                          <Layers className="w-3 h-3 mr-1" /> Todos
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setFiltroTipo('receita')}
+                          className={`h-7 px-3 text-xs ${filtroTipo === 'receita' ? 'bg-background text-green-600 dark:text-green-400 shadow-sm' : 'text-muted-foreground'}`}
+                        >
+                          <TrendingUp className="w-3 h-3 mr-1" /> Receitas
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setFiltroTipo('despesa')}
+                          className={`h-7 px-3 text-xs ${filtroTipo === 'despesa' ? 'bg-background text-red-600 dark:text-red-400 shadow-sm' : 'text-muted-foreground'}`}
+                        >
+                          <TrendingDown className="w-3 h-3 mr-1" /> Despesas
+                        </Button>
                       </div>
-                    ))
-                  )}
+
+                      <Button
+                        variant={priorizarPendentes ? "secondary" : "outline"}
+                        size="sm"
+                        onClick={() => setPriorizarPendentes(!priorizarPendentes)}
+                        className="h-8 text-xs"
+                      >
+                        <Filter className="w-3 h-3 mr-1" />
+                        Pendentes no topo
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {transacoesExibidas.length === 0 ? (
+                      <div className="text-center py-16 rounded-lg border-2 border-dashed">
+                        <p className="text-muted-foreground mb-1">Nenhuma transação encontrada neste mês.</p>
+                        <p className="text-xs text-muted-foreground">Use o formulário ao lado ou cadastre uma recorrência em Configurações.</p>
+                      </div>
+                    ) : (
+                      transacoesExibidas.map((transacao, index) => (
+                        <div key={transacao.id} className={`group flex items-center justify-between p-4 border rounded-xl shadow-sm hover:shadow-md transition-all ${transacao.status === 'previsto' ? 'bg-background border-l-4 border-l-primary' : 'bg-muted/40 opacity-80'}`}>
+                          <div className="flex items-center gap-4 overflow-hidden">
+                            {filtroTipo === 'todos' && !priorizarPendentes && (
+                              <div className="flex gap-0.5 mr-1">
+                                <Button variant="ghost" size="icon" className="h-6 w-6 p-0" onClick={() => moverItem(index, 'cima')} disabled={index === 0}>
+                                  <ArrowUp className="w-3 h-3" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 p-0" onClick={() => moverItem(index, 'baixo')} disabled={index === transacoesExibidas.length - 1}>
+                                  <ArrowDown className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            )}
+
+                            <div className={`p-2 rounded-full ${transacao.tipo === 'receita' ? 'bg-green-500/15' : 'bg-red-500/15'}`}>
+                              {transacao.tipo === 'receita' ? <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" /> : <TrendingDown className="w-5 h-5 text-red-600 dark:text-red-400" />}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold truncate">{transacao.descricao}</p>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                                <span className="font-mono font-bold bg-muted px-2 py-0.5 rounded">
+                                  {transacao.data.split('T')[0].split('-').reverse().join('/')}
+                                </span>
+                                <Badge variant="secondary" className="font-normal">
+                                  {transacao.nome_categoria}
+                                </Badge>
+                                {transacao.status === 'previsto' && (
+                                  <span className="text-primary font-medium flex items-center gap-1">
+                                    <AlertCircle className="w-3 h-3" /> Previsto
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right pl-4">
+                            <p className={`font-bold ${transacao.tipo === 'receita' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {transacao.tipo === 'despesa' ? '-' : '+'}{formatarMoeda(transacao.valor)}
+                            </p>
+                            <div className="flex justify-end gap-1 mt-2 opacity-80 group-hover:opacity-100 transition-opacity">
+                              <QuickDateButton
+                                currentData={transacao.data}
+                                onUpdate={(novaData) => handleAlterarData(transacao.id, novaData)}
+                              />
+                              {transacao.status === 'previsto' ? (
+                                <Button size="icon" variant="ghost" className="h-7 w-7 hover:text-green-600" onClick={() => handleEfetivar(transacao.id)} title="Confirmar Pagamento">
+                                  <CheckCircle2 className="w-4 h-4" />
+                                </Button>
+                              ) : (
+                                <Button size="icon" variant="ghost" className="h-7 w-7 hover:text-amber-500" onClick={() => handleReverter(transacao.id)} title="Reverter para Previsto">
+                                  <Undo2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEditar(transacao)}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-7 w-7 hover:text-destructive" onClick={() => handleRemover(transacao.id)}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </main>
+            </TabsContent>
+          </Tabs>
+        </Card>
+      </div>
     </div>
   );
 };

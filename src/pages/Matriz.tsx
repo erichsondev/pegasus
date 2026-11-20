@@ -13,38 +13,41 @@ import {
   adicionarCartao,
   removerCartao,
   obterLancamentosFixos,
+  adicionarLancamentoFixo,
   removerLancamentoFixo,
   type Categoria,
   type Cartao,
   type LancamentoFixo
 } from "@/lib/storage";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Pencil, Save, X, Plus, RefreshCw } from "lucide-react"; // Adicionado RefreshCw
+import { Trash2, Pencil, Save, X, Plus, RefreshCw, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const Matriz = () => {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [cartoes, setCartoes] = useState<Cartao[]>([]);
   const [lancamentosFixos, setLancamentosFixos] = useState<LancamentoFixo[]>([]);
+  
   const { toast } = useToast();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Estados originais mantidos
   const [novaCategoria, setNovaCategoria] = useState("");
   const [novoCartao, setNovoCartao] = useState("");
   
-  // Estado para controle de Edição
-  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
-  // Estado do formulário (Expandido para suportar edição)
   const [novoLancamento, setNovoLancamento] = useState({
     descricao: "",
     valor: "",
     tipo: "despesa" as "receita" | "despesa",
     categoria_id: "",
     dia_do_mes: "",
-    data_inicio: new Date().toISOString().split('T')[0], // Padrão: Hoje
-    data_fim: "" // Vazio = Indeterminado
+    data_inicio: new Date().toISOString().split('T')[0], 
+    data_fim: "" 
   });
 
   useEffect(() => {
@@ -63,40 +66,98 @@ const Matriz = () => {
       setCartoes(cartoesData);
       setLancamentosFixos(lancamentosData);
     } catch (error) {
-      toast({
-        title: "Erro ao carregar dados",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao carregar dados", variant: "destructive" });
     }
   };
 
-  // --- NOVA FUNÇÃO: SINCRONIZAR AGENDA (LIMPEZA DE FANTASMAS) ---
+  // =========================================================================
+  // MOTOR DE SINCRONIZAÇÃO DE AGENDA (Trazido do Node.js para o Frontend)
+  // =========================================================================
   const handleSincronizar = async () => {
-    if (!confirm("ATENÇÃO: Isso apagará todas as previsões futuras automáticas e recriará a agenda baseada apenas no que está configurado hoje. \n\nTransações manuais ou já pagas NÃO serão afetadas.\n\nDeseja continuar?")) return;
+    if (!user) return;
+    if (!confirm("ATENÇÃO: Isso apagará todas as previsões futuras automáticas e recriará a agenda baseada apenas no que está configurado hoje.\n\nTransações manuais ou já pagas NÃO serão afetadas.\n\nDeseja continuar?")) return;
     
+    setSyncing(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/manutencao/sincronizar-agenda`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${token}` }
-      });
+      const hoje = new Date();
+      const hojeStr = hoje.toISOString().split('T')[0];
 
-      if (response.ok) {
-        toast({ 
-          title: "Agenda Sincronizada!", 
-          description: "Lixos removidos e futuro recalculado com sucesso.",
-          className: "bg-green-600 text-white border-none"
-        });
-        carregarDados();
-      } else {
-        throw new Error();
+      // 1. Remove todas as previsões futuras não pagas
+      const { error: errDelete } = await supabase
+        .from('transacoes')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('status', 'previsto')
+        .gte('data', hojeStr);
+        
+      if (errDelete) throw errDelete;
+
+      // 2. Busca lançamentos fixos ativos atualizados
+      const fixos = await obterLancamentosFixos();
+      const novasTransacoes: any[] = [];
+
+      // 3. Recria a agenda
+      for (const item of fixos) {
+        const inicioVig = new Date(item.data_inicio);
+        // Horizonte padrão de 5 anos se não tiver fim
+        const fimVig = item.data_fim ? new Date(item.data_fim) : new Date(hoje.getFullYear() + 5, 11, 31);
+        
+        const absInicio = inicioVig.getFullYear() * 12 + inicioVig.getMonth();
+        const absFim = fimVig.getFullYear() * 12 + fimVig.getMonth();
+
+        let pointer = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        if (inicioVig < pointer) {
+          pointer = new Date(inicioVig.getFullYear(), inicioVig.getMonth(), 1);
+        }
+
+        while (pointer <= fimVig) {
+          const ano = pointer.getFullYear();
+          const mes = pointer.getMonth();
+          const absAlvo = ano * 12 + mes;
+
+          if (absAlvo >= absInicio && absAlvo <= absFim) {
+            const dataStr = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(item.dia_do_mes).padStart(2, '0')}`;
+            
+            // Cria apenas para datas de hoje em diante
+            if (dataStr >= hojeStr) {
+              novasTransacoes.push({
+                user_id: user.id,
+                categoria_id: item.categoria_id || null,
+                descricao: item.descricao,
+                valor: item.valor,
+                tipo: item.tipo,
+                status: 'previsto',
+                data: dataStr
+              });
+            }
+          }
+          pointer.setMonth(pointer.getMonth() + 1);
+        }
       }
+
+      // 4. Inserção em Lotes (Chunks) para não estourar o payload da API
+      const chunkSize = 500;
+      for (let i = 0; i < novasTransacoes.length; i += chunkSize) {
+        const chunk = novasTransacoes.slice(i, i + chunkSize);
+        const { error: errInsert } = await supabase.from('transacoes').insert(chunk);
+        if (errInsert) throw errInsert;
+      }
+
+      toast({ 
+        title: "Agenda Sincronizada!", 
+        description: `Foram recriadas ${novasTransacoes.length} transações futuras.`,
+        className: "bg-green-600 text-white border-none"
+      });
+      carregarDados();
+
     } catch (error) {
-      toast({ title: "Erro ao sincronizar", variant: "destructive" });
+      toast({ title: "Erro ao sincronizar agenda", variant: "destructive" });
+      console.error(error);
+    } finally {
+      setSyncing(false);
     }
   };
 
-  // --- Funções de Categorias e Cartões (MANTIDAS IGUAIS AO ORIGINAL) ---
   const handleAdicionarCategoria = async (e: React.FormEvent) => {
     e.preventDefault();
     if (novaCategoria.trim()) {
@@ -106,10 +167,7 @@ const Matriz = () => {
         carregarDados();
         toast({ title: "Categoria adicionada!" });
       } catch (error) {
-        toast({
-          title: "Erro ao adicionar categoria",
-          variant: "destructive",
-        });
+        toast({ title: "Erro ao adicionar", variant: "destructive" });
       }
     }
   };
@@ -123,15 +181,10 @@ const Matriz = () => {
         carregarDados();
         toast({ title: "Cartão adicionado!" });
       } catch (error) {
-        toast({
-          title: "Erro ao adicionar cartão",
-          variant: "destructive",
-        });
+        toast({ title: "Erro ao adicionar", variant: "destructive" });
       }
     }
   };
-
-  // --- Funções de Lançamentos Fixos (ATUALIZADAS PARA SUPORTAR EDIÇÃO) ---
 
   const prepararEdicao = (item: LancamentoFixo) => {
     setEditandoId(item.id);
@@ -139,13 +192,11 @@ const Matriz = () => {
       descricao: item.descricao,
       valor: String(item.valor),
       tipo: item.tipo,
-      categoria_id: item.categoria_id ? String(item.categoria_id) : "",
+      categoria_id: item.categoria_id || "",
       dia_do_mes: String(item.dia_do_mes),
-      // Formata data para o input (YYYY-MM-DD)
       data_inicio: item.data_inicio ? String(item.data_inicio).split('T')[0] : "",
       data_fim: item.data_fim ? String(item.data_fim).split('T')[0] : ""
     });
-    // Rola para o topo para editar
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -165,81 +216,65 @@ const Matriz = () => {
   const handleSalvarLancamento = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const corpo = {
-      descricao: novoLancamento.descricao,
-      valor: parseFloat(novoLancamento.valor),
-      tipo: novoLancamento.tipo,
-      dia_do_mes: parseInt(novoLancamento.dia_do_mes),
-      categoria_id: novoLancamento.categoria_id ? parseInt(novoLancamento.categoria_id) : null,
-      data_inicio: novoLancamento.data_inicio,
-      data_fim: novoLancamento.data_fim || null
-    };
-    
     try {
-      const token = localStorage.getItem("token");
-      const headers = { 
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      };
+      if (editandoId) {
+        // Usa atualização direta do Supabase para Edição
+        const { error } = await supabase
+          .from('lancamentos_fixos')
+          .update({
+            descricao: novoLancamento.descricao,
+            valor: parseFloat(novoLancamento.valor),
+            tipo: novoLancamento.tipo,
+            dia_do_mes: parseInt(novoLancamento.dia_do_mes),
+            categoria_id: novoLancamento.categoria_id || null,
+            data_inicio: novoLancamento.data_inicio,
+            data_fim: novoLancamento.data_fim || null
+          })
+          .eq('id', editandoId)
+          .eq('user_id', user?.id);
 
-      // Se tiver ID, é Edição (PUT), senão é Criação (POST)
-      const url = editandoId 
-        ? `${import.meta.env.VITE_API_URL}/api/lancamentos-fixos/${editandoId}`
-        : `${import.meta.env.VITE_API_URL}/api/lancamentos-fixos`;
-      
-      const method = editandoId ? "PUT" : "POST";
-
-      const response = await fetch(url, {
-        method,
-        headers,
-        body: JSON.stringify(corpo)
-      });
-
-      if (response.ok) {
-        toast({ title: editandoId ? "Lançamento atualizado!" : "Lançamento fixo adicionado!" });
-        cancelarEdicao(); // Limpa e sai do modo edição
-        carregarDados();
+        if (error) throw error;
+        toast({ title: "Lançamento atualizado!" });
       } else {
-        throw new Error("Falha na requisição");
+        await adicionarLancamentoFixo({
+          descricao: novoLancamento.descricao,
+          valor: parseFloat(novoLancamento.valor),
+          tipo: novoLancamento.tipo,
+          dia_do_mes: parseInt(novoLancamento.dia_do_mes),
+          categoria_id: novoLancamento.categoria_id,
+          data_inicio: novoLancamento.data_inicio,
+          data_fim: novoLancamento.data_fim
+        });
+        toast({ title: "Lançamento fixo adicionado!" });
       }
+      
+      cancelarEdicao(); 
+      carregarDados();
     } catch (error) {
-      toast({
-        title: "Erro ao salvar lançamento fixo",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao salvar", variant: "destructive" });
     }
   };
 
-  // Mantive o estilo inline que você usava para deletar, mas adicionei confirmação para segurança
-  const handleRemoverLancamento = async (id: number) => {
+  const handleRemoverLancamento = async (id: string) => {
     if(!confirm("Isso afetará lançamentos futuros. Deseja continuar?")) return;
-    
     try {
       await removerLancamentoFixo(id);
       carregarDados();
       toast({ title: "Lançamento fixo removido!" });
     } catch (error) {
-      toast({
-        title: "Erro ao remover lançamento fixo",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao remover", variant: "destructive" });
     }
   };
 
   const formatarMoeda = (valor: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(valor);
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   };
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      {/* Header atualizado com botão de voltar */}
       <Header showBack={true} backPath="/menu" />
 
       <main className="container mx-auto px-6 py-8">
-        {/* CABEÇALHO ATUALIZADO COM BOTÃO DE SINCRONIZAR */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
              <h2 className="text-2xl font-bold">Configurações</h2>
@@ -249,51 +284,36 @@ const Matriz = () => {
           <Button 
             variant="outline" 
             onClick={handleSincronizar}
+            disabled={syncing}
             className="gap-2 text-slate-600 border-slate-300 hover:bg-slate-100 hover:text-blue-600 shadow-sm"
             title="Limpar lixo e recalcular futuro"
           >
-            <RefreshCw className="w-4 h-4" />
-            Sincronizar Agenda
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            {syncing ? "Sincronizando..." : "Sincronizar Agenda"}
           </Button>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8">
-          {/* Categorias (MANTIDO IGUAL) */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Categorias</CardTitle>
-            </CardHeader>
+          <Card className="glass-card">
+            <CardHeader><CardTitle>Categorias</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <form onSubmit={handleAdicionarCategoria} className="flex gap-2">
-                <Input
-                  placeholder="Nova categoria"
-                  value={novaCategoria}
-                  onChange={(e) => setNovaCategoria(e.target.value)}
-                  required
-                />
+                <Input placeholder="Nova categoria" value={novaCategoria} onChange={(e) => setNovaCategoria(e.target.value)} required />
                 <Button type="submit">Adicionar</Button>
               </form>
-
               <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                 {categorias.map(cat => (
-                  <div key={cat.id} className="flex justify-between items-center p-3 border rounded-lg">
+                  <div key={cat.id} className="flex justify-between items-center p-3 border rounded-lg bg-white/50">
                     <span>{cat.nome}</span>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={async () => {
+                    <Button size="icon" variant="ghost" onClick={async () => {
                         try {
                           await removerCategoria(cat.id);
                           carregarDados();
                           toast({ title: "Categoria removida!" });
                         } catch (error) {
-                          toast({
-                            title: "Erro ao remover categoria",
-                            variant: "destructive",
-                          });
+                          toast({ title: "Erro ao remover", variant: "destructive" });
                         }
-                      }}
-                    >
+                      }}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>
@@ -302,42 +322,26 @@ const Matriz = () => {
             </CardContent>
           </Card>
 
-          {/* Cartões (MANTIDO IGUAL) */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Cartões de Crédito</CardTitle>
-            </CardHeader>
+          <Card className="glass-card">
+            <CardHeader><CardTitle>Cartões de Crédito</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <form onSubmit={handleAdicionarCartao} className="flex gap-2">
-                <Input
-                  placeholder="Nome do cartão"
-                  value={novoCartao}
-                  onChange={(e) => setNovoCartao(e.target.value)}
-                  required
-                />
+                <Input placeholder="Nome do cartão" value={novoCartao} onChange={(e) => setNovoCartao(e.target.value)} required />
                 <Button type="submit">Adicionar</Button>
               </form>
-
               <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                 {cartoes.map(cartao => (
-                  <div key={cartao.id} className="flex justify-between items-center p-3 border rounded-lg">
+                  <div key={cartao.id} className="flex justify-between items-center p-3 border rounded-lg bg-white/50">
                     <span>{cartao.nome}</span>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={async () => {
+                    <Button size="icon" variant="ghost" onClick={async () => {
                         try {
                           await removerCartao(cartao.id);
                           carregarDados();
                           toast({ title: "Cartão removido!" });
                         } catch (error) {
-                          toast({
-                            title: "Erro ao remover cartão",
-                            variant: "destructive",
-                          });
+                          toast({ title: "Erro ao remover", variant: "destructive" });
                         }
-                      }}
-                    >
+                      }}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>
@@ -346,8 +350,7 @@ const Matriz = () => {
             </CardContent>
           </Card>
 
-          {/* Lançamentos Fixos (ATUALIZADO COM EDIÇÃO E VIGÊNCIA) */}
-          <Card className={`lg:col-span-2 transition-colors ${editandoId ? 'border-blue-500 bg-blue-50/30' : ''}`}>
+          <Card className={`lg:col-span-2 transition-colors glass-card ${editandoId ? 'border-blue-500 bg-blue-50/50' : ''}`}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 {editandoId ? <Pencil className="w-5 h-5 text-blue-600" /> : <Plus className="w-5 h-5" />}
@@ -358,92 +361,48 @@ const Matriz = () => {
               <form onSubmit={handleSalvarLancamento} className="grid md:grid-cols-4 lg:grid-cols-6 gap-4 items-end">
                 <div className="md:col-span-2">
                   <Label>Descrição</Label>
-                  <Input
-                    value={novoLancamento.descricao}
-                    onChange={(e) => setNovoLancamento({ ...novoLancamento, descricao: e.target.value })}
-                    required
-                  />
+                  <Input value={novoLancamento.descricao} onChange={(e) => setNovoLancamento({ ...novoLancamento, descricao: e.target.value })} required />
                 </div>
-
                 <div>
                   <Label>Valor (R$)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={novoLancamento.valor}
-                    onChange={(e) => setNovoLancamento({ ...novoLancamento, valor: e.target.value })}
-                    required
-                  />
+                  <Input type="number" step="0.01" value={novoLancamento.valor} onChange={(e) => setNovoLancamento({ ...novoLancamento, valor: e.target.value })} required />
                 </div>
-
                 <div>
                   <Label>Tipo</Label>
-                  <Select
-                    value={novoLancamento.tipo}
-                    onValueChange={(v: any) => setNovoLancamento({ ...novoLancamento, tipo: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select value={novoLancamento.tipo} onValueChange={(v: any) => setNovoLancamento({ ...novoLancamento, tipo: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="receita">Receita</SelectItem>
                       <SelectItem value="despesa">Despesa</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div>
                   <Label>Categoria</Label>
-                  <Select
-                    value={novoLancamento.categoria_id}
-                    onValueChange={(v) => setNovoLancamento({ ...novoLancamento, categoria_id: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
+                  <Select value={novoLancamento.categoria_id} onValueChange={(v) => setNovoLancamento({ ...novoLancamento, categoria_id: v })}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
-                      {categorias.map(cat => (
-                        <SelectItem key={cat.id} value={cat.id.toString()}>{cat.nome}</SelectItem>
-                      ))}
+                      {categorias.map(cat => (<SelectItem key={cat.id} value={cat.id}>{cat.nome}</SelectItem>))}
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div>
                   <Label>Dia do Mês</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="31"
-                    value={novoLancamento.dia_do_mes}
-                    onChange={(e) => setNovoLancamento({ ...novoLancamento, dia_do_mes: e.target.value })}
-                    required
-                  />
+                  <Input type="number" min="1" max="31" value={novoLancamento.dia_do_mes} onChange={(e) => setNovoLancamento({ ...novoLancamento, dia_do_mes: e.target.value })} required />
                 </div>
 
-                {/* NOVOS CAMPOS DE VIGÊNCIA */}
                 <div className="md:col-span-2">
                    <Label>Início Vigência</Label>
-                   <Input 
-                     type="date" 
-                     value={novoLancamento.data_inicio}
-                     onChange={(e) => setNovoLancamento({ ...novoLancamento, data_inicio: e.target.value })}
-                     required
-                   />
+                   <Input type="date" value={novoLancamento.data_inicio} onChange={(e) => setNovoLancamento({ ...novoLancamento, data_inicio: e.target.value })} required />
                 </div>
-
                 <div className="md:col-span-2">
                    <Label>Fim Vigência (Opcional)</Label>
-                   <Input 
-                     type="date" 
-                     value={novoLancamento.data_fim}
-                     onChange={(e) => setNovoLancamento({ ...novoLancamento, data_fim: e.target.value })}
-                   />
+                   <Input type="date" value={novoLancamento.data_fim} onChange={(e) => setNovoLancamento({ ...novoLancamento, data_fim: e.target.value })} />
                 </div>
 
                 <div className="md:col-span-2 flex gap-2">
                   {editandoId && (
-                    <Button type="button" variant="outline" onClick={cancelarEdicao} className="flex-1">
+                    <Button type="button" variant="outline" onClick={cancelarEdicao} className="flex-1 bg-white">
                       <X className="w-4 h-4 mr-2" /> Cancelar
                     </Button>
                   )}
@@ -457,7 +416,7 @@ const Matriz = () => {
               <div className="space-y-2 pt-4 border-t">
                 <h3 className="font-semibold mb-2">Lista de Itens Recorrentes</h3>
                 {lancamentosFixos.map(lanc => (
-                  <div key={lanc.id} className={`flex flex-col md:flex-row items-start md:items-center justify-between p-3 border rounded-lg ${lanc.tipo === 'receita' ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-red-500'}`}>
+                  <div key={lanc.id} className={`flex flex-col md:flex-row items-start md:items-center justify-between p-3 border rounded-lg bg-white/60 ${lanc.tipo === 'receita' ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-red-500'}`}>
                     <div className="flex-1 grid md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
                       <div>
                         <p className="font-semibold">{lanc.descricao}</p>
@@ -478,21 +437,10 @@ const Matriz = () => {
                     </div>
                     
                     <div className="flex gap-2 mt-2 md:mt-0">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => prepararEdicao(lanc)}
-                        title="Editar Item"
-                      >
+                      <Button size="icon" variant="ghost" onClick={() => prepararEdicao(lanc)} title="Editar Item">
                         <Pencil className="w-4 h-4 text-blue-500" />
                       </Button>
-                      
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => handleRemoverLancamento(lanc.id)}
-                        title="Remover Item"
-                      >
+                      <Button size="icon" variant="ghost" onClick={() => handleRemoverLancamento(lanc.id)} title="Remover Item">
                         <Trash2 className="w-4 h-4 text-destructive" />
                       </Button>
                     </div>
